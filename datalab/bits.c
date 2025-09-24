@@ -274,7 +274,18 @@ int rotateLeft(int x, int n) {
  *   Rating: 4
  */
 int bitParity(int x) {
-  return 2;
+  /* 
+  我们可以注意到，对于一个 32 位的整数，它的 1 的个数和 0 的个数之和为 32 是一个偶数
+  所以只需要统计 1 的奇偶性就能判断 0 的奇偶性
+  同时再注意到，可以对 x 的每一位进行 XOR 运算，如果为偶数的话就都能消掉，如果为奇数的话就会剩一
+  由于 XOR 满足交换律，所以我们可以二分 x，对它逐位异或，最后判断是否为 1 即可
+  */
+  x = x ^ (x >> 16);
+  x = x ^ (x >> 8);
+  x = x ^ (x >> 4);
+  x = x ^ (x >> 2);
+  x = x ^ (x >> 1);
+  return x & 0x1;
 }
 /* 
  * palindrome - return 1 if x is palindrome in binary form,
