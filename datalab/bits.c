@@ -299,10 +299,21 @@ int bitParity(int x) {
  *   Legal ops: ~ ! | ^ & << >> +
  *   Max ops: 40
  *   Rating: 4
-
  */
 int palindrome(int x) {
-    return 2;
+  /*
+  我们的策略是将 x 彻底反转，然后利用 XOR 判断位关系
+  反转需要利用分治算法，将反转整个 x 转换成最小的子问题，最终实现彻底反转
+  首先反转相邻一位，然后反转相邻两位，...，以此类推，最终反转前后 16 位即可
+  */
+  int x_copy = x;
+  /* mask 构造形如 0b01010101*/
+  x = ((x & 0x55555555) << 1) | ((x & 0xAAAAAAAA) >> 1);
+  x = ((x & 0x33333333) << 2) | ((x & 0xCCCCCCCC) >> 2);
+  x = ((x & 0x0F0F0F0F) << 4) | ((x & 0xF0F0F0F0) >> 4);
+  x = ((x & 0x00FF00FF) << 8) | ((x & 0xFF00FF00) >> 8);
+  x = (x << 16) | ((x >> 16) & 0xFFFF);
+  return !(x_copy ^ x);
 }
 /* 
  * negate - return -x 
@@ -472,7 +483,31 @@ unsigned float_half(unsigned uf) {
  *   Rating: 4
  */
 unsigned float_i2f(int x) {
-  return 2;
+  /* 
+  正常的按照 float 格式转换即可，只用处理规格化浮点数
+  */
+  /*int x_copy = x;
+  int shift_cnt = 0;
+  int exp_base;
+  int exp;
+  int frac;
+  if (x == 0) {
+    return 0;
+  }
+  int sign = 0;
+  if (x < 0) {
+    sign = 1;
+  }
+  x_copy <<= 1;
+  while (x_copy >= 0) {
+    x_copy <<= 1;
+    shift_cnt += 1;
+  }
+  exp_base = 30 - shift_cnt;
+  exp = 127 + exp_base;
+  if (exp_base <= 23) {
+    frac = 
+  }*/
 }
 /* 
  * float64_f2i - Return bit-level equivalent of expression (int) f
