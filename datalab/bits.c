@@ -414,10 +414,14 @@ unsigned float_half(unsigned uf) {
   如果他不是特殊数，判断它是不是规格数
   如果是规格数，直接对 exp - 1 即可实现除法
   如果是非规格数，直接将 frac 右移一位即可
+  在处理非规格化数时，还要考虑舍入的问题，只有当最后两位为 0b11 时才需要舍入
   */
   int sign_mask = 0x80000000;
   int exp_mask = 0x7F800000;
   int frac_mask = 0x007FFFFF;
+  int last_two_num;
+  int result;
+  int last_exp = 1 << 23;
 
   int sign = uf & sign_mask;
   int exp = uf & exp_mask;
@@ -425,15 +429,27 @@ unsigned float_half(unsigned uf) {
 
   if (exp == exp_mask) {
     return uf;
-  } else {
-    if (exp == 0x0) {
-      frac >>= 1;
-      return sign | exp | frac;
-    } else {
-      exp -= (1 << 23);
-      return sign | exp | frac;
-    }
   }
+
+  last_two_num = frac & 0x3;
+  if (exp == 0) {
+    frac >>= 1;
+    /* 处理舍入 */
+    if (last_two_num == 3) {
+      frac += 1;
+    }
+  } else if (exp == last_exp) {
+    /* 如果恰好为边界情况的规格数，需要将 frac 在开头合并上 1 后右移 */
+    exp = 0;
+    frac = (1 << 23 | frac) >> 1;
+    if (last_two_num == 3) {
+      frac += 1;
+    }
+  } else {
+    exp -= last_exp;
+  }
+  result = sign | exp | frac;
+  return result;
 }
 /* 
  * float_i2f - Return bit-level equivalent of expression (float) x
