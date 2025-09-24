@@ -404,7 +404,23 @@ int isLess(int x, int y) {
  *   Rating: 3
  */
 int satMul2(int x) {
-  return 2;
+  /*
+  先要判断是否溢出，只需要看 x 与 2x 的符号是否相同
+  然后要实现 condition 的位表示，需要构造一个 overflow_mask
+  一种情况全一，另一种情况全零，同时与要返回的值做 AND 运算
+  通过 x 的符号来构造溢出的情况，若为 1，溢出为 TMin，是 0x8000000，若为 0，溢出为 ~TMin
+  还需要构造一个中间值，使得 x 大于零为正溢出，小于零为负溢出
+  */
+  int x_sign = (x >> 31) & 0x1;
+  int TMax = ~(1 << 31);
+  int sum = x + x;
+  int sum_sign = (sum >> 31) & 0x1;
+  int overflow = sum_sign ^ x_sign;
+  int overflow_mask = (overflow << 31) >> 31; /* 如果溢出是 0xFFFFFFFF，如果没溢出是 0 */
+  /* 如果是正数，返回 TMax，如果是负数，返回 TMin，通过 x 的符号构造 mask */
+  int sign_mask = x >> 31;
+  int temp = sign_mask ^ TMax;
+  return (overflow_mask & temp) | (~overflow_mask & sum);
 }
 /*
  * modThree - calculate x mod 3 without using %.
