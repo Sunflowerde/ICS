@@ -539,5 +539,24 @@ int float64_f2i(unsigned uf1, unsigned uf2) {
  *   Rating: 4
  */
 unsigned float_pwr2(int x) {
-    return 2;
+  /*
+  分情况对 x 进行讨论，首先 x 的符号位为 0，它的 exp 和 frac，要么只有 1 个 1，要么没有 1
+  若 x 是规格化数，它的 frac 为 0
+  若 x 是特殊数，它一定返回 INF
+  若 x 是非规格化数，仅处理 frac，需要左移 x + 149 位
+  */
+  /* 特殊数 */
+  int INF = 0x7F800000;
+  if (x > 127) {
+    return INF;
+  } else if (x >= -126) {
+    /* 规格化数 */
+    return (x + 127) << 23;
+  } else if (x >= -149) {
+    /* 非规格化数 */
+    return 1 << (x + 149);
+  } else {
+    /* 太小 */
+    return 0;
+  }
 }
