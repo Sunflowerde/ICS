@@ -554,8 +554,8 @@ int float64_f2i(unsigned uf1, unsigned uf2) {
     return 0x80000000;
   } else {
     /* 共 32 位 */
-    int frac = ((uf2 & 0xFFFFF) << 11) | ((uf1 >> 21) & 0x7FF) | 0x80000000;
-    frac >> (31 - exp);
+    unsigned frac = ((uf2 & 0xFFFFF) << 11) | ((uf1 >> 21) & 0x7FF) | 0x80000000;
+    frac >>= (31 - exp);
     if (sign) {
       return -frac;
     }
