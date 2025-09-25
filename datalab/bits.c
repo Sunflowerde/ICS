@@ -528,21 +528,18 @@ unsigned float_i2f(int x) {
   正常的按照 float 格式转换即可，只用处理规格化浮点数
   */
   int abs_x = x;
-  int k;
+  int k = 31;
   int exp;
   unsigned x_copy;
   unsigned frac;
-  unsigned tail;
-  unsigned half;
+  unsigned round;
   unsigned sign;
-  int shift;
-  int last_num;
   if (x == 0) {
     return 0;
   }
   /* 特判 TMin，因为取负会溢出 */
   if (x == 0x80000000) {
-    return (1 << 31) | (0x9E << 23);
+    return 0xCF << 24;
   }
   /* 确定符号位 */
   sign = (x >> 31) & 1;
@@ -553,27 +550,15 @@ unsigned float_i2f(int x) {
   /* 确定 exp */
   x_copy = abs_x;
   /* 判断到底有多少指数位 */
-  k = 31;
-  while (((x_copy >> k) & 0x1) == 0) {
+  while (!(abs_x >> k)) {
     k--;
   }
   exp = k + 127;
   /* 确定 frac */
-  /* 先提取最高位 1 后的所有数字，然后分情况讨论 */
-  tail = ((1 << k) - 1) & abs_x;
-  /* 不足 23 位，左移补齐 */
-  if (k <= 23) {
-    frac = tail << (23 - k);
-  } else {
-    shift = k - 23;
-    frac = tail >> shift;
-    /* 处理舍入问题 */
-    last_num = tail & ((1 << shift) - 1);
-    half = 1 << (shift - 1);
-    if (last_num > half || ((last_num == half) && (frac & 1))) {
-      frac++;
-    }
-  }
+  abs_x <<= (31 - k);
+  frac = (abs_x >> 0x8) & 0x7FFFFF;
+  round = abs_x & 0xFF;
+  frac += (round > 0x80) || ((round == 0x80) && (frac & 1));
   /* 最后检查是否有溢出 */
   if (frac == 0x800000) {
     exp++;
