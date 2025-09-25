@@ -527,7 +527,59 @@ unsigned float_i2f(int x) {
   /* 
   正常的按照 float 格式转换即可，只用处理规格化浮点数
   */
-  return 2;
+  int abs_x = x;
+  int k;
+  int exp;
+  unsigned x_copy;
+  unsigned frac;
+  unsigned tail;
+  unsigned half;
+  unsigned sign;
+  int shift;
+  int last_num;
+  if (x == 0) {
+    return 0;
+  }
+  /* 特判 TMin，因为取负会溢出 */
+  if (x == 0x80000000) {
+    return (1 << 31) | (0x9E << 23);
+  }
+  /* 确定符号位 */
+  sign = (x >> 31) & 1;
+  /* 为了判断最高位的 1，需要取绝对值 */
+  if (sign) {
+    abs_x = -x;
+  }
+  /* 确定 exp */
+  x_copy = abs_x;
+  /* 判断到底有多少指数位 */
+  k = 31;
+  while (((x_copy >> k) & 0x1) == 0) {
+    k--;
+  }
+  exp = k + 127;
+  /* 确定 frac */
+  /* 先提取最高位 1 后的所有数字，然后分情况讨论 */
+  tail = ((1 << k) - 1) & abs_x;
+  /* 不足 23 位，左移补齐 */
+  if (k <= 23) {
+    frac = tail << (23 - k);
+  } else {
+    shift = k - 23;
+    frac = tail >> shift;
+    /* 处理舍入问题 */
+    last_num = tail & ((1 << shift) - 1);
+    half = 1 << (shift - 1);
+    if (last_num > half || ((last_num == half) && (frac & 1))) {
+      frac++;
+    }
+  }
+  /* 最后检查是否有溢出 */
+  if (frac == 0x800000) {
+    exp++;
+    frac = 0;
+  }
+  return (sign << 31) | (exp << 23) | frac;
 }
 /* 
  * float64_f2i - Return bit-level equivalent of expression (int) f
@@ -543,6 +595,9 @@ unsigned float_i2f(int x) {
  *   Rating: 4
  */
 int float64_f2i(unsigned uf1, unsigned uf2) {
+  /*
+  注意 double 转 int 向零舍入即可
+  */
   unsigned sign = uf2 >> 31;
   int exp_mask = 0x7FF;
   int exp = ((uf2 >> 20) & exp_mask) - 1023;
