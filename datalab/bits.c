@@ -439,18 +439,23 @@ int modThree(int x) {
   同时，为了正常处理，我们需要在绝对值上计算
   */
   int sign = x >> 31; /* 0 或 -1 */
+  int is_TMin = !(x ^ (1 << 31));
   int abs_x = (x + sign) ^ sign; /* 如果是负数，相当于 ~(x - 1), -x = ~x+1*/
+  int TMin_result = ~1;
+  int select = ~is_TMin + 1;
   abs_x = (abs_x >> 16) + (abs_x & 0xFFFF);
   abs_x = (abs_x >> 8) + (abs_x & 0xFF);
   abs_x = (abs_x >> 4) + (abs_x & 0xF);
+  abs_x = (abs_x >> 2) + (abs_x & 0x3);
   abs_x = (abs_x >> 2) + (abs_x & 0x3);
   abs_x = (abs_x >> 2) + (abs_x & 0x3); /* 这一步保证收敛到 0，1，2，3，只需要处理 abs_x 为 3 的情形 */
   int is_three = !(abs_x ^ 0x3);
   int mask = ~is_three + 1; /* 若是 3，则变成 -1，若不是 3，正常返回 */
   int ans = abs_x & ~mask; /* 此时 ans 的值为 0，1，2 */
-  /* 最后处理负数 */
+  /* 最后处理负数，由于 TMin 无法取绝对值，需要特判 */
+  /* 若 x 为 TMin，返回 -2(~1) */
   ans = (ans ^ sign) + (~sign + 1); /* 如果是正数，sign 为 0，后一项为 0；如果 sign 为 1，第一项相当于取反，第二项相当于加一 */
-  return ans;
+  return (ans & ~is_TMin) | (TMin_result & is_TMin);
 }
 /* 
  * float_half - Return bit-level equivalent of expression 0.5*f for
