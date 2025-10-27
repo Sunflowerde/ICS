@@ -1,3 +1,4 @@
+# 徐梓文 2410306105
 	.pos 0
 	irmovq	stack,%rsp
 	call main
@@ -16,9 +17,52 @@ array:
 # You may want to modify this portion
 
 bubble_a:
-	ret
+	# data 位于 %rdi
+	addq %rsi, %rsi
+	addq %rsi, %rsi
+	addq %rsi, %rsi # 计算 8 * count
+	irmovq $8, %r8 # %r8 中存放 8
+	subq %r8, %rsi
+	addq %rdi, %rsi # last 存放于 %rsi
+
+	test1:
+		rrmovq %rsi, %r10
+		subq %rdi, %r10
+		jle end1
+
+	loop1:
+		rrmovq %rdi, %rbx # i 存放于 %rbx
+	
+	test2:
+		rrmovq %rbx, %r9 # 临时存放 i
+		subq %rsi, %r9
+		jge end2
+
+	loop2:
+		mrmovq 8(%rbx), %r10 # *(i + 1) 存放于 %r10
+		mrmovq (%rbx), %r11 # *i 存放于 %r11
+		mrmovq 8(%rbx), %r12 # 临时存放 *(i + 1)
+		mrmovq 8(%rbx), %r13 # t 存放于 %r13
+		subq %r11, %r12
+		jge end3
+		rmmovq %r13, (%rbx)
+		rmmovq %r11, 8(%rbx)
+
+	end3:
+		addq %r8, %rbx
+		jmp test2
+
+	end2:
+		subq %r8, %rsi
+		jmp test1
+
+	end1:
+		ret
 
 main:
+	irmovq array, %rdi
+	irmovq $6, %rsi
+	call bubble_a
 	ret
 
 	.pos 0x200

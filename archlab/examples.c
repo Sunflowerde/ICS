@@ -50,3 +50,34 @@ void bubble_sort(long *data, long count)
     }
 }
 /* $end examples */
+void bubble_sort(long *data, long count) {
+    long *last = data + count - 1;
+    test1:
+        if (last <= data) {
+            goto end1;
+        }
+
+    loop1:
+        long *i = data;
+
+    test2:
+        if (i >= last) {
+            goto end2;
+        }
+    
+    loop2:
+        if (*(i + 1) < *i) {
+            long t = *(i + 1);
+            *(i + 1) = *i;
+            *i = t;
+        }
+        i++;
+        goto test2;
+
+    end2:
+        last--;
+        goto test1;
+
+    end1:
+        return;
+}
