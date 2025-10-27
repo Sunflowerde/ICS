@@ -1,3 +1,42 @@
 # As you've got familiar with Y86 after writting your first y86 code
 # (bubble.ys), this code is left blank for you :)
 # 徐梓文 2410306105
+    .pos 0
+    irmovq stack, %rsp
+    call main
+    halt
+
+    .align 8
+ele1:
+    .quad  0x00d
+    .quad ele2
+ele2:
+    .quad 0x0e0
+    .quad ele3
+ele3:
+    .quad 0xf00
+    .quad 0
+
+main:
+    irmovq ele1, %rdi
+    call sum_list
+    ret
+
+sum_list:
+    irmovq $0, %rbx # val 存放于 %rbx
+    jmp test
+
+loop:
+    mrmovq (%rdi), %r10 # ls->val 存放于 %r10
+    addq %r10, %rbx
+    mrmovq 8(%rdi), %rdi
+    jmp test
+
+test:
+    andq %rdi, %rdi
+    jne loop
+    rrmovq %rbx, %rax
+    ret
+
+    .pos 0x200
+stack:
