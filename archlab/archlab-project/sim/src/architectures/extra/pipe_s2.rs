@@ -44,6 +44,9 @@ u64 f_pc = [
     // Call.  Use instruction constant
     // If the previous instruction is CALL, the constant value should be the next PC
     // valC is from Fetch Stage, thus the last cycle
+    // 阶段 n，F 将指令信息存储
+    // 周期 n + 1，D 获得信息，并根据信息决定下一条 pc
+    // 如果再使用 F 的信息，此时 F 正在处理下一条指令，就会出错
     D.icode == CALL : D.valC;
     // Taken branch.  Use instruction constant
     D.icode == JX && cnd : D.valC;
@@ -51,7 +54,7 @@ u64 f_pc = [
     // valM is from DEMW stage, thus the current cycle
     D.icode == RET : valM;
     // Default: Use incremented PC
-    1 : F.valP;
+    1 : F.valP; // Fetch 阶段会自动根据指令长度生成下一个 PC，如果没有特殊的指令，就会根据默认值执行下一条指令
 ];
 
 @set_input(imem, {
