@@ -69,7 +69,7 @@ u64 f_pc = [
     E.icode == JX && e_cnd : E.valC; // 在 E 阶段才进行计算，获取 F 跳转的条件，所以是 e_cnd
     // Completion of RET instruction.  Use value from stack
     // valM is from DEMW stage, thus the current cycle
-    E.icode == RET : e_valM; // 而 ret 和 jx 需要在 ALU 计算完成后才能获得要跳转的位置 
+    E.icode == RET : e_valM; // 而 ret 和 jx 需要 ALU 计算完成后才能获得要跳转的位置 
     // Default: Use incremented PC
     1 : F.valP;
 ];
