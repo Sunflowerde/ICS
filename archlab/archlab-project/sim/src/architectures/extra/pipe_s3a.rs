@@ -64,12 +64,12 @@ u64 f_pc = [
     // Call.  Use instruction constant
     // If the previous instruction is CALL, the constant value should be the next PC
     // valC is from Fetch Stage, thus the last cycle
-    D.icode == CALL : D.valC;
+    D.icode == CALL : D.valC; // D 阶段就要决定 call 要跳转到哪
     // Taken branch.  Use instruction constant
-    U8_PLACEHOLDER == JX && e_cnd : U64_PLACEHOLDER;
+    E.icode == JX && e_cnd : E.valC; // 在 E 阶段才进行计算，获取 F 跳转的条件，所以是 e_cnd
     // Completion of RET instruction.  Use value from stack
     // valM is from DEMW stage, thus the current cycle
-    U8_PLACEHOLDER == RET : e_valM;
+    E.icode == RET : e_valM; // 而 ret 和 jx 需要在 ALU 计算完成后才能获得要跳转的位置 
     // Default: Use incremented PC
     1 : F.valP;
 ];
