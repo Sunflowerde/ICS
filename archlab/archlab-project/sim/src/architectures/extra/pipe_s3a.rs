@@ -257,7 +257,7 @@ ConditionCode cc = reg_cc.cc;
 bool e_cnd = cond.cnd;
 
 u8 e_dstE = [
-    U8_PLACEHOLDER == CMOVX && !BOOL_PLACEHOLDER : RNONE;
+    E.icode == CMOVX && !e_cnd : RNONE;
     1 : E.dstE;
 ];
 u8 e_dstM = E.dstM;
@@ -317,18 +317,18 @@ bool prog_term = e_stat in { Hlt, Adr, Ins };
 // If a data hazard occurs, we need to wait for the data to be written to the
 // registers before proceeding.
 bool data_harzard = d_srcA != RNONE && d_srcA in { e_dstE, e_dstM }
-    || U8_PLACEHOLDER != RNONE && BOOL_PLACEHOLDER;
+    || d_srcB != RNONE && d_srcB in { e_dstE, e_dstM }; // 需要用到 rA 或 rB，同时二者还在 execute 阶段，无法获得其中的值
 
-bool f_stall = D.icode in { JX, RET } || BOOL_PLACEHOLDER;
+bool f_stall = D.icode in { JX, RET } || data_harzard; // control hazard，停止更新 PC，因为 ret 或 jx 可能会导致下一条指令地址改变
 
 @set_stage(f, {
     stall: f_stall,
 });
 
 
-bool d_stall = BOOL_PLACEHOLDER;
+bool d_stall = data_harzard;
 
-bool d_bubble = D.icode in { JX, RET } && !d_stall;
+bool d_bubble = D.icode in { JX, RET } && !d_stall; // 先处理 data hazard
 
 @set_stage(d, {
     stall: d_stall,
