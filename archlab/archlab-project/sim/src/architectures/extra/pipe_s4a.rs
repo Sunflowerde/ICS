@@ -64,10 +64,10 @@ u64 f_pc = [
     // valC is from Fetch Stage, thus the last cycle
     D.icode == CALL : D.valC;
     // Branch misprediction.  Use incremental PC
-    U8_PLACEHOLDER == JX && !e_cnd : U64_PLACEHOLDER;
+    E.icode == JX && !e_cnd : E.valP;
     // Completion of RET instruction.  Use value from stack
     // valM is from DEMW stage, thus the current cycle
-    U8_PLACEHOLDER == RET : U64_PLACEHOLDER;
+    E.icode == RET : e_valM;
     // Default: Use predicted PC
     1 : F.pred_pc;
 ];
@@ -173,13 +173,13 @@ u8 d_srcB = [
 ];
 
 u64 d_valA = [
-    d_srcA == U8_PLACEHOLDER : e_valE;
-    d_srcA == U8_PLACEHOLDER : U64_PLACEHOLDER;
+    d_srcA == e_dstE : e_valE;
+    d_srcA == e_dstM : e_valM;
     1: reg_file.valA;
 ];
 u64 d_valB = [
-    BOOL_PLACEHOLDER : U64_PLACEHOLDER;
-    BOOL_PLACEHOLDER : U64_PLACEHOLDER;
+    d_srcB == e_dstE : e_valE;
+    d_srcB == e_dstM : e_valM;
     1: reg_file.valB;
 ];
 
@@ -268,7 +268,7 @@ ConditionCode cc = reg_cc.cc;
 bool e_cnd = cond.cnd;
 
 u8 e_dstE = [
-    U8_PLACEHOLDER == CMOVX && !BOOL_PLACEHOLDER : RNONE;
+    E.icode == CMOVX && !e_cnd : RNONE;
     1 : E.dstE;
 ];
 u8 e_dstM = E.dstM;
@@ -346,7 +346,7 @@ bool prog_term = m_stat in { Hlt, Adr, Ins };
 // If a branch misprediction is detected during the Execute stage, it means that
 // the instruction currently in the Decode stage is invalid. Therefore, the next
 // cycle’s Execute stage needs to insert a bubble.
-bool branch_mispred = BOOL_PLACEHOLDER;
+bool branch_mispred = E.icode == JX && !e_cnd;
 
 // If a RET instruction is detected in either the Decode or Execute stage, then
 // the instruction in the current Fetch stage is invalid. Therefore, a bubble
@@ -355,7 +355,7 @@ bool branch_mispred = BOOL_PLACEHOLDER;
 // In fact, when E.icode == RET, the instruction in the current Decode stage is 
 // also invalid, but because the D.icode in the previous cycle was RET, at this
 // point D.icode == NOP, so there's no need to add a condition for e_bubble.
-bool ret_harzard = RET in { U8_PLACEHOLDER, U8_PLACEHOLDER };
+bool ret_harzard = RET in { D.icode, E.icode };
 
 // This instruction needs to read from a register whose data was loaded from
 // memory by the previous instruction, but the previous instruction is still in
