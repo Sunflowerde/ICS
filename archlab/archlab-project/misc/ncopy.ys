@@ -2,39 +2,120 @@
 # ncopy.ys - Copy a src block of len words to dst.
 # Return the number of positive words (>0) contained in src.
 #
-# Include your name and ID here.
+# 徐梓文 2410306105
 #
-# Describe how and why you modified the baseline code.
+# Modification Description:
+# 1. Loop Unrolling (8-way): The main loop processes 8 elements per iteration
+#    to significantly reduce loop overhead (branches, counter updates).
+# 2. Conditional Moves: Replaced the conditional jump for incrementing the counter
+#    with a `cmovg` instruction. This avoids pipeline stalls from branch
+#    mispredictions.
+# 3. Register-based Constants: Pre-loaded constants like 1, 8, and 64 into
+#    registers before the loop to avoid slow `irmovq` instructions inside the loop.
+# 4. Two-phase processing: An unrolled main loop handles the bulk of the data,
+#    and a simple tail loop handles the remaining 1-7 elements, ensuring correctness
+#    for any array length.
 #
 ################################################################################
-# Do not modify this portion
 # Function prologue.
 # %rdi = src, %rsi = dst, %rdx = len
 ncopy:
 ################################################################################
-# You can modify this portion
-	# Loop header
-	xorq %rax,%rax		# count = 0;
-	andq %rdx,%rdx		# len <= 0?
-	jle Done		# if so, goto Done:
+    # Prologue: Setup constants and initial check
+    xorq %rax, %rax             # count = 0
+    irmovq $1, %r8              # const 1 for counting
+    irmovq $8, %r9              # const 8 for pointer increments
+    
+    # Check if len >= 8, if not, go to tail loop
+    iaddq $-8, %rdx             # len -= 8
+    jl TailLoopHeader           # if len < 0 (orig len < 8), jump to tail
 
-Loop:	mrmovq (%rdi), %r10	# read val from src...
-	rmmovq %r10, (%rsi)	# ...and store it to dst
-	andq %r10, %r10		# val <= 0?
-	jle Npos		# if so, goto Npos:
-	irmovq $1, %r10
-	addq %r10, %rax		# count++
+UnrolledLoop:
+    # --- Process 8 elements at once ---
+    # Element 1
+    mrmovq (%rdi), %r10
+    rmmovq %r10, (%rsi)
+    andq %r10, %r10
+    xorq %r11, %r11
+    cmovg %r8, %r11
+	addq %r11, %rax
+    # Element 2
+    mrmovq 8(%rdi), %r10
+    rmmovq %r10, 8(%rsi)
+	andq %r10, %r10
+    xorq %r11, %r11
+	cmovg %r8, %r11
+	addq %r11, %rax
+    # Element 3
+    mrmovq 16(%rdi), %r10
+    rmmovq %r10, 16(%rsi)
+	andq %r10, %r10
+    xorq %r11, %r11
+	cmovg %r8, %r11
+	addq %r11, %rax
+    # Element 4
+    mrmovq 24(%rdi), %r10
+    rmmovq %r10, 24(%rsi)
+	andq %r10, %r10
+    xorq %r11, %r11
+	cmovg %r8, %r11
+	addq %r11, %rax
+    # Element 5
+    mrmovq 32(%rdi), %r10
+    rmmovq %r10, 32(%rsi)
+	andq %r10, %r10
+    xorq %r11, %r11
+	cmovg %r8, %r11
+	addq %r11, %rax
+    # Element 6
+    mrmovq 40(%rdi), %r10
+    rmmovq %r10, 40(%rsi)
+	andq %r10, %r10
+    xorq %r11, %r11
+	cmovg %r8, %r11
+	addq %r11, %rax
+    # Element 7
+    mrmovq 48(%rdi), %r10
+    rmmovq %r10, 48(%rsi)
+	andq %r10, %r10
+    xorq %r11, %r11
+	cmovg %r8, %r11
+	addq %r11, %rax
+    # Element 8
+    mrmovq 56(%rdi), %r10
+    rmmovq %r10, 56(%rsi)
+	andq %r10, %r10
+    xorq %r11, %r11
+	cmovg %r8, %r11
+	addq %r11, %rax
+    
+    # Update pointers and length for the block
+    iaddq $64, %rdi
+    iaddq $64, %rsi
+    
+    # Loop condition
+    iaddq $-8, %rdx
+    jge UnrolledLoop
 
-Npos:	irmovq $1, %r10
-	subq %r10, %rdx		# len--
-	irmovq $8, %r10
-	addq %r10, %rdi		# src++
-	addq %r10, %rsi		# dst++
-	andq %rdx,%rdx		# len > 0?
-	jg Loop			# if so, goto Loop:
+TailLoopHeader:
+    # Restore len for tail loop (add back the 8 we subtracted)
+    iaddq $8, %rdx
+    jle Done                    # if len was exactly a multiple of 8, we are done
+    
+TailLoop:
+    mrmovq (%rdi), %r10
+    rmmovq %r10, (%rsi)
+    andq %r10, %r10
+    xorq %r11, %r11
+    cmovg %r8, %r11
+    addq %r11, %rax
+    # Update pointers for one element
+    addq %r9, %rdi
+    addq %r9, %rsi
+    # Update len for one element
+    iaddq $-1, %rdx
+    jg TailLoop
+
 Done:
-	ret
-
-# In grader, we will add a "trap: jmp trap" here, which traps your program in an
-# infinite loop. Thus your function should always return instead of falling
-# through till the end of the source code :)
+    ret
+################################################################################

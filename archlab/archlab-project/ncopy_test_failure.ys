@@ -1,0 +1,101 @@
+
+            .pos 0
+            irmovq stack, %rsp
+            irmovq data_to_copy, %rdi
+            irmovq data_dst, %rsi
+            irmovq $1, %rdx
+
+            call ncopy
+            halt
+            nop
+            nop
+            nop
+            nop
+            nop
+        
+        ################################################################################
+# ncopy.ys - Copy a src block of len words to dst.
+# Return the number of positive words (>0) contained in src.
+#
+# 徐梓文 2410306105
+#
+# How and why you modified the baseline code.
+# 1. 8-Way Loop Unrolling: The main loop processes 8 elements per iteration to
+#    reduce loop overhead and improve instruction-level parallelism.
+#
+# 2. Conditional Moves (cmovg): Replaced conditional jumps with `cmovg` for
+#    counting positive numbers. This avoids costly branch misprediction
+#    penalties and keeps the CPU pipeline full.
+#
+# 3. Valid ISA Instructions: Replaced all non-standard `iaddq` pseudo-
+#    instructions with the correct `irmovq` + `addq` sequence to pass ISA
+#    checks and ensure correct execution.
+#
+# 4. Two-Phase Structure: A main unrolled loop handles most of the data.
+#    A separate, simple tail loop correctly handles the remaining 1-7 elements,
+#    ensuring the function works for any array size.
+#
+################################################################################
+# Do not modify this portion
+# Function prologue.
+# %rdi = src, %rsi = dst, %rdx = len
+ncopy:
+################################################################################
+xorq %rax, %rax             # count = 0
+    irmovq $1, %r8              # Constant 1
+    irmovq $8, %r9              # Constant 8
+
+UnrolledLoopHeader:
+    irmovq $8, %r11             # Use r11 as temporary
+    rrmovq %rdx, %r10           # Copy len to r10 for testing
+    subq %r11, %r10             # Test if (len - 8) >= 0
+    jl TailLoopHeader           # If len < 8, go to the tail section
+
+# --- Unrolled Loop Body ---
+    mrmovq (%rdi), %r10; rmmovq %r10, (%rsi); xorq %r11, %r11; andq %r10, %r10; cmovg %r8, %r11; addq %r11, %rax
+    mrmovq 8(%rdi), %r10; rmmovq %r10, 8(%rsi); xorq %r11, %r11; andq %r10, %r10; cmovg %r8, %r11; addq %r11, %rax
+    mrmovq 16(%rdi), %r10; rmmovq %r10, 16(%rsi); xorq %r11, %r11; andq %r10, %r10; cmovg %r8, %r11; addq %r11, %rax
+    mrmovq 24(%rdi), %r10; rmmovq %r10, 24(%rsi); xorq %r11, %r11; andq %r10, %r10; cmovg %r8, %r11; addq %r11, %rax
+    mrmovq 32(%rdi), %r10; rmmovq %r10, 32(%rsi); xorq %r11, %r11; andq %r10, %r10; cmovg %r8, %r11; addq %r11, %rax
+    mrmovq 40(%rdi), %r10; rmmovq %r10, 40(%rsi); xorq %r11, %r11; andq %r10, %r10; cmovg %r8, %r11; addq %r11, %rax
+    mrmovq 48(%rdi), %r10; rmmovq %r10, 48(%rsi); xorq %r11, %r11; andq %r10, %r10; cmovg %r8, %r11; addq %r11, %rax
+    mrmovq 56(%rdi), %r10; rmmovq %r10, 56(%rsi); xorq %r11, %r11; andq %r10, %r10; cmovg %r8, %r11; addq %r11, %rax
+
+    # Update pointers & length
+    irmovq $64, %r11; addq %r11, %rdi
+    irmovq $64, %r11; addq %r11, %rsi
+    irmovq $-8, %r11; addq %r11, %rdx
+    jmp UnrolledLoopHeader
+
+TailLoopHeader:
+    andq %rdx, %rdx
+    jle Done
+
+TailLoop:
+    mrmovq (%rdi), %r10
+    rmmovq %r10, (%rsi)
+    xorq %r11, %r11      # CRITICAL: Reset temp counter to 0
+    andq %r10, %r10
+    cmovg %r8, %r11      # if val > 0, r11 = 1, otherwise it stays 0
+    addq %r11, %rax      # Add either 0 or 1
+
+    addq %r9, %rdi
+    addq %r9, %rsi
+    irmovq $-1, %r11
+    addq %r11, %rdx
+    jg TailLoop
+
+Done:
+    ret
+
+        # do not fall through to the end of the source!
+        # Otherwise you will encounter this trap :)
+        trapititit: jmp trapititit
+
+            .pos 0x1000 # source code + stack limits to 4kb
+            .align 8
+        stack:
+        data_to_copy:
+            .quad 0x53175d61490b23df
+        data_dst:
+        
