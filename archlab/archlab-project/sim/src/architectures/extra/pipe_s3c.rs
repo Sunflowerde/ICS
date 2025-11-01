@@ -1,3 +1,4 @@
+// 徐梓文 2410306105
 //! The performance improvement of `pipe_s3b` is not very significant because
 //! we always stall/bubble when encountering a JX (jump) instruction. However,
 //! in reality, we can implement branch prediction, since both branch options
