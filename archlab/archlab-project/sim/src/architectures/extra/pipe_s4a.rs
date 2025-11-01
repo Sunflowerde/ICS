@@ -67,7 +67,7 @@ u64 f_pc = [
     E.icode == JX && !e_cnd : E.valP;
     // Completion of RET instruction.  Use value from stack
     // valM is from DEMW stage, thus the current cycle
-    E.icode == RET : e_valM;
+    M.icode == RET : m_valM;
     // Default: Use predicted PC
     1 : F.pred_pc;
 ];
@@ -174,12 +174,12 @@ u8 d_srcB = [
 
 u64 d_valA = [
     d_srcA == e_dstE : e_valE;
-    d_srcA == e_dstM : e_valM;
+    d_srcA == M.dstM : m_valM;
     1: reg_file.valA;
 ];
 u64 d_valB = [
     d_srcB == e_dstE : e_valE;
-    d_srcB == e_dstM : e_valM;
+    d_srcB == M.dstM : m_valM;
     1: reg_file.valB;
 ];
 
@@ -367,28 +367,31 @@ bool load_use_harzard = E.icode in { MRMOVQ, POPQ } && E.dstM in { d_srcA, d_src
 // If both a branch misprediction and a RET hazard occur at the same time, 
 // since the jump instruction is executed before the RET, the RET should not be 
 // executed, so no stall is required.
-bool f_stall = BOOL_PLACEHOLDER && !BOOL_PLACEHOLDER || BOOL_PLACEHOLDER;
+// F 阶段停止取指：1.加载使用冒险，2.ret 冒险，且没有更高级别的冒险
+bool f_stall = ret_harzard && !branch_mispred || load_use_harzard;
 
 @set_stage(f, {
     stall: f_stall,
 });
 
 
-bool d_stall = BOOL_PLACEHOLDER;
+bool d_stall = load_use_harzard;
 
 // If both a branch misprediction and a RET hazard occur at the same time,
 // since the jump instruction is executed before the RET, the RET should not
 // have been executed, so a bubble is not needed.
 // 
 // Actually, ret_harzard and d_stall cannot be true at the same time.
-bool d_bubble = BOOL_PLACEHOLDER && !BOOL_PLACEHOLDER && !d_stall;
+// D 阶段 bubble 的条件：1.ret，2.mis_predict
+bool d_bubble = ret_harzard && !branch_mispred && !d_stall;
 
 @set_stage(d, {
     stall: d_stall,
     bubble: d_bubble,
 });
 
-bool e_bubble = branch_mispred || BOOL_PLACEHOLDER;
+// e_bubble 的条件：1.load_use_hazard，2.mis_predict
+bool e_bubble = branch_mispred || load_use_harzard;
 
 @set_stage(e, {
     bubble: e_bubble,
