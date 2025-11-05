@@ -15,7 +15,7 @@
 // This macro defines all pipeline registers in this architecture.
 
 //! 第一步，增加 IOPQ 指令，提升效率，减少指令数
-//!
+//! 第二步，修改 decode 阶段
 crate::define_stages! {
     FetchStage f {
         pred_pc: u64 = 0
@@ -24,6 +24,7 @@ crate::define_stages! {
         stat: Stat = Bub, icode: u8 = NOP, ifun: u8 = 0,
         rA: u8 = RNONE, rB: u8 = RNONE,
         valC: u64 = 0, valP: u64 = 0,
+        // TODO
         special_jmp: bool = false
     }
     ExecuteStage e {
@@ -31,17 +32,25 @@ crate::define_stages! {
         valC: u64 = 0,
         valA: u64 = 0, valB: u64 = 0,
         dstE: u8 = RNONE, dstM: u8 = RNONE,
-        srcA: u8 = RNONE, srcB: u8 = RNONE
+        srcA: u8 = RNONE, srcB: u8 = RNONE,
+        // TODO
+        cc: ConditionCode = CC_INIT,
+        // TODO
+        special_jmp: bool = false
     }
     /// Memory Access Stage
     MemoryStage m {
         stat: Stat = Bub, icode: u8 = NOP, cnd: bool = false,
         valE: u64 = 0, valA: u64 = 0,
-        dstE: u8 = RNONE, dstM: u8 = RNONE
+        dstE: u8 = RNONE, dstM: u8 = RNONE,
+        // TODO
+        special_jmp: bool = false
     }
     WritebackStage w {
         stat: Stat = Bub, icode: u8 = NOP, valE: u64 = 0,
-        valM: u64 = 0, dstE: u8 = RNONE, dstM: u8 = RNONE
+        valM: u64 = 0, dstE: u8 = RNONE, dstM: u8 = RNONE,
+        // TODO
+        special_ret: bool = false
     }
 }
 
@@ -83,11 +92,13 @@ use Stat::*;
 // What address should instruction be fetched at
 u64 f_pc = [
     // Mispredicted branch. Fetch at incremented PC
-    M.icode == JX && !M.cnd : M.valA;
+    // TODO
+    M.icode == JX && !M.cnd && !M.special_jmp : M.valA;
     // Completion of RET instruction
-    W.icode == RET : W.valM;
+    // TODO
+    W.icode == RET && !W.special_ret : W.valM;
     // Default: Use predicted value of PC (default to 0)
-     1 : F.pred_pc;
+    1 : F.pred_pc;
 ];
 
 @set_input(imem, {
@@ -147,9 +158,16 @@ u8 f_rB = ialign.rB;
 
 // Predict next value of PC
 u64 f_pred_pc = [
-     f_icode in { JX, CALL } : f_valC;
-     1 : f_valP;
+    // TODO
+    f_icode == JX && !(d_icode in { OPQ, IOPQ, JX }) && !(e_icode in {OPQ, IOPQ, JX}) && !e_cnd : f_valP;
+    f_icode in { JX, CALL } : f_valC;
+    // TODO
+    f_icode == RET && d_icode == PUSHQ : d_valA;
+    1 : f_valP;
 ];
+
+// TODO
+bool f_special_jmp = (f_icode == JX) && !(d_icode in { OPQ, IOPQ, JX }) && !(e_icode in { OPQ, IOPQ, JX });
 
 @set_stage(f, {
     pred_pc: f_pred_pc,
@@ -163,10 +181,14 @@ u64 f_pred_pc = [
     valP: f_valP,
     rA: f_rA,
     rB: f_rB,
+    // TODO
+    special_jmp: f_special_jmp,
 });
 
 :=======================: Decode and Write Back Stage :========================:
 
+// TODO
+bool d_special_jmp = D.special_jmp;
 // What register should be used as the A source?
 u8 d_srcA = [
     D.icode in { CMOVX, RMMOVQ, OPQ, PUSHQ } : D.rA;
@@ -234,6 +256,10 @@ Stat d_stat = D.stat;
     valB: d_valB,
     dstE: d_dstE,
     dstM: d_dstM,
+    // TODO
+    cc: e_cc,
+    // TODO
+    special_jmp: d_special_jmp,
 });
 
 :==============================: Execute Stage :===============================:
