@@ -13,6 +13,9 @@
 // program counter, since we need it for instruction fetching.
 
 // This macro defines all pipeline registers in this architecture.
+
+//! 第一步，增加 IOPQ 指令，提升效率，减少指令数
+//!
 crate::define_stages! {
     FetchStage f {
         pred_pc: u64 = 0
@@ -20,7 +23,8 @@ crate::define_stages! {
     DecodeStage d {
         stat: Stat = Bub, icode: u8 = NOP, ifun: u8 = 0,
         rA: u8 = RNONE, rB: u8 = RNONE,
-        valC: u64 = 0, valP: u64 = 0
+        valC: u64 = 0, valP: u64 = 0,
+        special_jmp: bool = false
     }
     ExecuteStage e {
         stat: Stat = Bub, icode: u8 = NOP, ifun: u8 = 0,
@@ -105,7 +109,7 @@ u8 f_ifun = [
 
 // Is instruction valid?
 bool instr_valid = f_icode in { NOP, HALT, CMOVX, IRMOVQ, RMMOVQ,
-    MRMOVQ, OPQ, JX, CALL, RET, PUSHQ, POPQ };
+    MRMOVQ, OPQ, JX, CALL, RET, PUSHQ, POPQ, IOPQ }; // 添加 IOPQ 指令
 
 // Determine status code for fetched instruction
 Stat f_stat = [
@@ -117,10 +121,10 @@ Stat f_stat = [
 
 // Does fetched instruction require a regid byte?
 bool need_regids
-    = f_icode in { CMOVX, OPQ, PUSHQ, POPQ, IRMOVQ, RMMOVQ, MRMOVQ };
+    = f_icode in { CMOVX, OPQ, PUSHQ, POPQ, IRMOVQ, RMMOVQ, MRMOVQ, IOPQ }; // 添加 IOPQ 指令
 
 // Does fetched instruction require a constant word?
-bool need_valC = f_icode in { IRMOVQ, RMMOVQ, MRMOVQ, JX, CALL };
+bool need_valC = f_icode in { IRMOVQ, RMMOVQ, MRMOVQ, JX, CALL, IOPQ }; // 添加 IOPQ 指令
 
 @set_input(pc_inc, {
     need_valC: need_valC,
@@ -172,14 +176,14 @@ u8 d_srcA = [
 
 // What register should be used as the B source?
 u8 d_srcB = [
-    D.icode in { OPQ, RMMOVQ, MRMOVQ } : D.rB;
+    D.icode in { OPQ, RMMOVQ, MRMOVQ, IOPQ } : D.rB; // iopq V, rB 需要获取 rB 的值
     D.icode in { PUSHQ, POPQ, CALL, RET } : RSP;
     1 : RNONE; // Don't need register
 ];
 
 // What register should be used as the E destination?
 u8 d_dstE = [
-    D.icode in { CMOVX, IRMOVQ, OPQ } : D.rB;
+    D.icode in { CMOVX, IRMOVQ, OPQ, IOPQ } : D.rB; // IOPQ 计算后的结果要存给 rB
     D.icode in { PUSHQ, POPQ, CALL, RET } : RSP;
     1 : RNONE; // Don't write any register
 ];
@@ -237,7 +241,7 @@ Stat d_stat = D.stat;
 // Select input A to ALU
 u64 aluA = [
     E.icode in { CMOVX, OPQ } : E.valA;
-    E.icode in { IRMOVQ, RMMOVQ, MRMOVQ } : E.valC;
+    E.icode in { IRMOVQ, RMMOVQ, MRMOVQ, IOPQ } : E.valC; // alu 计算的第一个值来自 valC
     E.icode in { CALL, PUSHQ } : NEG_8;
     E.icode in { RET, POPQ } : 8;
     1 : 0; // Other instructions don't need ALU
@@ -245,14 +249,14 @@ u64 aluA = [
 
 // Select input B to ALU
 u64 aluB = [
-    E.icode in { RMMOVQ, MRMOVQ, OPQ, CALL, PUSHQ, RET, POPQ } : E.valB;
+    E.icode in { RMMOVQ, MRMOVQ, OPQ, CALL, PUSHQ, RET, POPQ, IOPQ } : E.valB; // alu 计算的第二个值来自 rB
     E.icode in { CMOVX, IRMOVQ } : 0;
     1 : 0; // Other instructions don't need ALU
 ];
 
 // Set the ALU function
 u8 alufun = [
-    E.icode == OPQ : E.ifun;
+    E.icode in { OPQ, IOPQ } : E.ifun; // IOPQ 与 OPQ 的 ifun 一致
     1 : ADD;
 ];
 
@@ -263,7 +267,7 @@ u8 alufun = [
 });
 
 // Should the condition codes be updated?
-bool set_cc = E.icode == OPQ &&
+bool set_cc = E.icode in { OPQ, IOPQ } && // IOPQ 也可以 set_cc
     // State changes only during normal operation
     !(m_stat in { Adr, Ins, Hlt }) && !(W.stat in { Adr, Ins, Hlt });
 
