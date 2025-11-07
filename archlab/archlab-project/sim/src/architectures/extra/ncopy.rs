@@ -264,6 +264,8 @@ Stat d_stat = D.stat;
 
 :==============================: Execute Stage :===============================:
 
+// TODO
+bool e_special_jmp = E.special_jmp;
 // Select input A to ALU
 u64 aluA = [
     E.icode in { CMOVX, OPQ } : E.valA;
@@ -307,7 +309,8 @@ u64 e_valE = alu.e;
     set_cc: set_cc,
 });
 
-
+// TODO
+ConditionCode e_cc = reg_cc.cc;
 ConditionCode cc = reg_cc.cc;
 u8 e_ifun = E.ifun;
 
@@ -319,7 +322,11 @@ u8 e_ifun = E.ifun;
 bool e_cnd = cond.cnd;
 
 // Generate valA in execute stage
-u64 e_valA = E.valA;    // Pass valA through stage
+// TODO
+u64 e_valA = [
+    E.icode in { RMMOVQ, PUSHQ } && E.srcA == M.dstM : m_valM;
+    1 : E.valA;
+]
 
 // Set dstE to RNONE in event of not-taken conditional move
 u8 e_dstE = [
@@ -339,6 +346,8 @@ Stat e_stat = E.stat;
     cnd: e_cnd,
     valE: e_valE,
     valA: e_valA,
+    // TODO
+    special_jmp : e_special_jmp,
 });
 
 :===============================: Memory Stage :===============================:
@@ -378,6 +387,9 @@ u64 m_valE = M.valE;
 u8 m_dstE = M.dstE;
 u8 m_dstM = M.dstM;
 
+// TODO
+bool m_special_ret = (M.icode == RET) && (W.icode == PUSHQ);
+
 @set_stage(w, {
     stat: m_stat,
     icode: m_icode,
@@ -385,6 +397,8 @@ u8 m_dstM = M.dstM;
     valM: m_valM,
     dstE: m_dstE,
     dstM: m_dstM,
+    // TODO
+    special_ret: m_special_ret,
 });
 
 :=============================: Write Back Stage :=============================:
@@ -426,11 +440,14 @@ bool prog_term = [
 // Should I stall or inject a bubble into Pipeline Register F?
 // At most one of these can be true.
 bool f_bubble = false;
-bool f_stall =
-    // Conditions for a load/use hazard
-    E.icode in { MRMOVQ, POPQ } && E.dstM in { d_srcA, d_srcB } ||
-    // Stalling at fetch while ret passes through pipeline
-    RET in {D.icode, E.icode, M.icode};
+// TODO
+bool load_use_hazard = E.icode in { MRMOVQ, POPQ } && (E.dstM == d_srcB || (E.dstM == d_srcA) && !(D.icode in { RMMOVQ, PUSHQ}));
+// TODO
+bool ret_hazard = (D.icode == RET && E.icode != PUSHQ) || (E.icode == RET && M.icode != PUSHQ) || (M.icode == RET && W.icode != PUSHQ);
+// TODO
+bool branch_mispred = (E.icode == JX && !e_cnd && !e_special_jmp);
+// TODO
+bool f_stall = load_use_hazard || ret_hazard;
 
 @set_stage(f, {
     bubble: f_bubble,
@@ -439,17 +456,11 @@ bool f_stall =
 
 // Should I stall or inject a bubble into Pipeline Register D?
 // At most one of these can be true.
-bool d_stall =
-    // Conditions for a load/use hazard
-    E.icode in { MRMOVQ, POPQ } && E.dstM in { d_srcA, d_srcB };
+// TODO
+bool d_stall = load_use_hazard;
 
-bool d_bubble =
-    // Mispredicted branch
-    (E.icode == JX && !e_cnd) ||
-    // Stalling at fetch while ret passes through pipeline
-    // but not condition for a load/use hazard
-    !(E.icode in { MRMOVQ, POPQ } && E.dstM in { d_srcA, d_srcB }) &&
-      RET in {D.icode, E.icode, M.icode};
+// TODO 
+bool d_bubble = branch_mispred || (!load_use_hazard && ret_hazard);
 
 @set_stage(d, {
     stall: d_stall,
@@ -459,11 +470,8 @@ bool d_bubble =
 // Should I stall or inject a bubble into Pipeline Register E?
 // At most one of these can be true.
 bool e_stall = false;
-bool e_bubble =
-    // Mispredicted branch
-    (E.icode == JX && !e_cnd) ||
-    // Conditions for a load/use hazard
-    E.icode in { MRMOVQ, POPQ } && E.dstM in { d_srcA, d_srcB };
+// TODO
+bool e_bubble = branch_mispred || load_use_hazard;
 
 @set_stage(e, {
     stall: e_stall,

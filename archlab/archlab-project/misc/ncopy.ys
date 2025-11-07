@@ -3,9 +3,9 @@
 # Return the number of positive words (>0) contained in src.
 #
 # Include your name and ID here.
-# 徐梓文 2410306105
-# Describe how and why you modified the baseline code.
 #
+# Describe how and why you modified the baseline code.
+# 进行八路循环展开
 ################################################################################
 # Do not modify this portion
 # Function prologue.
@@ -14,27 +14,95 @@ ncopy:
 ################################################################################
 # You can modify this portion
 	# Loop header
-	xorq %rax,%rax		# count = 0;
-	andq %rdx,%rdx		# len <= 0?
-	jle Done		# if so, goto Done:
+	xorq %rax, %rax		# count = 0;
+	iaddq $-8, %rdx # 如果 len < 0，直接跳转到最后一处循环
+	jl pre_last_loop # 如果长度小于 8，直接进行最后一个循环
 
-Loop:	mrmovq (%rdi), %r10	# read val from src...
-	rmmovq %r10, (%rsi)	# ...and store it to dst
-	andq %r10, %r10		# val <= 0?
-	jle Npos		# if so, goto Npos:
-	irmovq $1, %r10
-	addq %r10, %rax		# count++
+# 一下读取所有的值，由于使用不同的寄存器，并不会产生 data hazard
+Loop:	
+	mrmovq (%rdi), %r8 # val1
+	mrmovq 8(%rdi), %r9 # val2
+	mrmovq 16(%rdi), %r10 # val3
+	mrmovq 24(%rdi), %r11 # val4
+	mrmovq 32(%rdi), %r12 # val5
+	mrmovq 40(%rdi), %r13 # val6
+	mrmovq 48(%rdi), %r14 # val7
+	mrmovq 56(%rdi), %rcx # val8
 
-Npos:	irmovq $1, %r10
-	subq %r10, %rdx		# len--
-	irmovq $8, %r10
-	addq %r10, %rdi		# src++
-	addq %r10, %rsi		# dst++
-	andq %rdx,%rdx		# len > 0?
-	jg Loop			# if so, goto Loop:
+OP1:
+	rmmovq %r8, (%rsi) # 把 val1 放进 dst[0]
+	andq %r8, %r8 # 判断 val1 是否为正
+	jle OP2
+	iaddq $1, %rax
+
+OP2:
+	rmmovq %r9, 8(%rsi) # 其余 8 个值同理
+	andq %r9, %r9
+	jle OP3
+	iaddq $1, %rax
+
+OP3:
+	rmmovq %r10, 16(%rsi)
+	andq %r10, %r10
+	jle OP4
+	iaddq $1, %rax
+
+OP4:
+	rmmovq %r11, 24(%rsi)
+	andq %r11, %r11
+	jle OP5
+	iaddq $1, %rax
+
+OP5:
+	rmmovq %r12, 32(%rsi)
+	andq %r12, %r12
+	jle OP6
+	iaddq $1, %rax
+
+OP6:
+	rmmovq %r13, 40(%rdi)
+	andq %r13, %r13
+	jle OP7
+	iaddq $1, %rax
+
+OP7:
+	rmmovq %r14, 48(%rsi)
+	andq %r14, %r14
+	jle OP8
+	iaddq $1, %rax
+
+OP8:
+	rmmovq %rcx, 56(%rsi)
+	andq %rcx, %rcx
+	jle Update
+	iaddq $1, %rax
+
+update:
+	iaddq $64, %rdi # 处理完 8 位，再来处理下一个 8 位
+	iaddq $64, %rsi
+	iaddq $-8, %rdx
+	jge Loop
+
+pre_last_loop: # 在做余数处理前先处理GG数据
+	iaddq $8, %rdx # 恢复多减的 8
+	je Done # 如果正好是 8 的倍数，表示已经处理完，直接返回
+
+last_loop:
+	mrmovq (%rdi), %r8 # 依次处理剩余的 1-8 个值
+	rmmovq %r8, (%rsi) # 写入余数
+	andq %r8, %r8
+	jle update_last
+	iaddq $1, %rax
+
+update_last:
+	iaddq $8, %rdi
+	iaddq $8, %rsi
+	iaddq $-1, %rdx
+	jg last_loop
+
 Done:
 	ret
 
 # In grader, we will add a "trap: jmp trap" here, which traps your program in an
 # infinite loop. Thus your function should always return instead of falling
-# through till the end of the source code :)%    
+# through till the end of the source code :)%                          
