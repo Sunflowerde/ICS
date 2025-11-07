@@ -1,5 +1,4 @@
-// 2300013165 杨涛瑜
-
+//! 徐梓文 2410306105
 //! This architecture is used cooperatively with the `ncopy.ys` to grade the 
 //! ncopy task.
 //! 
@@ -7,61 +6,52 @@
 //! `sim_macro::hcl`. You should not change other outside code.
 //! 
 //! The initial version of this file is a copy of the `seq_std.rs`.
-//! 
-//! 
-//! changed to pipe_std.rs
-//! added IOPQ instruction
-//! implemented load forwarding
-//! ac is still 4
-//! 
-//! ONCE I TRIED TO ADD A STAGE TO CALCULATE COND TO DECREASE AC FROM 4 TO 3
-//! BUT IT'S HARD TO IMPLEMENT
-//! AND THE COST OF MISPREDICTING BRANCH IS SO HIGH
-//! BUT SINCE NO INSTRUCTION USES COND RIGHT AFTER IT SETS CC
-//! SO CC AND COND CAN BE CALCULATED IN PARALLEL
-//! WHICH IS WHAT I IMPLEMENTED IN THIS CODE
-//! JUST NEED TO MODIFY A FEW LINES!!!
-//! 
-//! 
-//! update on 11/15
-//! specially deal with IOPQ xx xx JX to avoid control harzard
-//! use pushq ret to implement indirect jump
 
 // This macro defines all pipeline registers in this architecture.
 // In SEQ architecture, all stages are executed in a single cycle. Thus
 // principally no pipeline registers are needed, with the exception of the
 // program counter, since we need it for instruction fetching.
+
+// This macro defines all pipeline registers in this architecture.
+
+//! 第一步，增加 IOPQ 指令，提升效率，减少指令数
+//! 第二步，修改 decode 阶段
 crate::define_stages! {
-  FetchStage f {
-      pred_pc: u64 = 0
-  }
-  DecodeStage d {
-      stat: Stat = Bub, icode: u8 = NOP, ifun: u8 = 0,
-      rA: u8 = RNONE, rB: u8 = RNONE,
-      valC: u64 = 0, valP: u64 = 0,
-      special_jmp: bool = false
-  }
-  ExecuteStage e {
-      stat: Stat = Bub, icode: u8 = NOP, ifun: u8 = 0,
-      valC: u64 = 0,
-      valA: u64 = 0, valB: u64 = 0,
-      dstE: u8 = RNONE, dstM: u8 = RNONE,
-      srcA: u8 = RNONE, srcB: u8 = RNONE,
-      cc: ConditionCode = CC_INIT,
-      special_jmp: bool = false
-  }
-  /// Memory Access Stage
-  MemoryStage m {
-      stat: Stat = Bub, icode: u8 = NOP, cnd: bool = false,
-      valE: u64 = 0, valA: u64 = 0,
-      dstE: u8 = RNONE, dstM: u8 = RNONE,
-      special_jmp: bool = false
-  }
-  WritebackStage w {
-      stat: Stat = Bub, icode: u8 = NOP, valE: u64 = 0,
-      valM: u64 = 0, dstE: u8 = RNONE, dstM: u8 = RNONE,
-      special_ret: bool = false
-  }
+    FetchStage f {
+        pred_pc: u64 = 0
+    }
+    DecodeStage d {
+        stat: Stat = Bub, icode: u8 = NOP, ifun: u8 = 0,
+        rA: u8 = RNONE, rB: u8 = RNONE,
+        valC: u64 = 0, valP: u64 = 0,
+        // TODO
+        special_jmp: bool = false
+    }
+    ExecuteStage e {
+        stat: Stat = Bub, icode: u8 = NOP, ifun: u8 = 0,
+        valC: u64 = 0,
+        valA: u64 = 0, valB: u64 = 0,
+        dstE: u8 = RNONE, dstM: u8 = RNONE,
+        srcA: u8 = RNONE, srcB: u8 = RNONE,
+        // TODO
+        cc: ConditionCode = CC_INIT,
+        // TODO
+        special_jmp: bool = false
+    }
+    /// Memory Access Stage
+    MemoryStage m {
+        stat: Stat = Bub, icode: u8 = NOP, cnd: bool = false,
+        valE: u64 = 0, valA: u64 = 0,
+        dstE: u8 = RNONE, dstM: u8 = RNONE,
+        // TODO
+        special_jmp: bool = false
+    }
+    WritebackStage w {
+        stat: Stat = Bub, icode: u8 = NOP, valE: u64 = 0,
+        valM: u64 = 0, dstE: u8 = RNONE, dstM: u8 = RNONE,
+        // TODO
+        special_ret: bool = false
+    }
 }
 
 sim_macro::hcl! {
@@ -101,54 +91,56 @@ use Stat::*;
 
 // What address should instruction be fetched at
 u64 f_pc = [
-  // Mispredicted branch. Fetch at incremented PC
-  M.icode == JX && !M.cnd && !M.special_jmp : M.valA;
-  // Completion of RET instruction
-  W.icode == RET && !W.special_ret : W.valM;
-  // Default: Use predicted value of PC (default to 0)
-   1 : F.pred_pc;
+    // Mispredicted branch. Fetch at incremented PC
+    // TODO
+    M.icode == JX && !M.cnd && !M.special_jmp : M.valA;
+    // Completion of RET instruction
+    // TODO
+    W.icode == RET && !W.special_ret : W.valM;
+    // Default: Use predicted value of PC (default to 0)
+    1 : F.pred_pc;
 ];
 
 @set_input(imem, {
-  pc: f_pc
+    pc: f_pc
 });
 
 // Determine icode of fetched instruction
 u8 f_icode = [
-  imem.error : NOP;
-  1 : imem.icode;
+    imem.error : NOP;
+    1 : imem.icode;
 ];
 
 // Determine ifun
 u8 f_ifun = [
-  imem.error : 0xf; // FNONE;
-  1 : imem.ifun;
+    imem.error : 0xf; // FNONE;
+    1 : imem.ifun;
 ];
 
 
 // Is instruction valid?
 bool instr_valid = f_icode in { NOP, HALT, CMOVX, IRMOVQ, RMMOVQ,
-  MRMOVQ, OPQ, JX, CALL, RET, PUSHQ, POPQ, IOPQ };
+    MRMOVQ, OPQ, JX, CALL, RET, PUSHQ, POPQ, IOPQ }; // 添加 IOPQ 指令
 
 // Determine status code for fetched instruction
 Stat f_stat = [
-  imem.error : Adr;
-  !instr_valid : Ins;
-  f_icode == HALT : Hlt;
-  1 : Aok;
+    imem.error : Adr;
+    !instr_valid : Ins;
+    f_icode == HALT : Hlt;
+    1 : Aok;
 ];
 
 // Does fetched instruction require a regid byte?
 bool need_regids
-  = f_icode in { CMOVX, OPQ, PUSHQ, POPQ, IRMOVQ, RMMOVQ, MRMOVQ, IOPQ };
+    = f_icode in { CMOVX, OPQ, PUSHQ, POPQ, IRMOVQ, RMMOVQ, MRMOVQ, IOPQ }; // 添加 IOPQ 指令
 
 // Does fetched instruction require a constant word?
-bool need_valC = f_icode in { IRMOVQ, RMMOVQ, MRMOVQ, JX, CALL, IOPQ };
+bool need_valC = f_icode in { IRMOVQ, RMMOVQ, MRMOVQ, JX, CALL, IOPQ }; // 添加 IOPQ 指令
 
 @set_input(pc_inc, {
-  need_valC: need_valC,
-  need_regids: need_regids,
-  old_pc: f_pc,
+    need_valC: need_valC,
+    need_regids: need_regids,
+    old_pc: f_pc,
 });
 
 u64 f_valP =  pc_inc.new_pc;
@@ -156,8 +148,8 @@ u64 f_valP =  pc_inc.new_pc;
 [u8; 9] f_align = imem.align;
 
 @set_input(ialign, {
-  align: f_align,
-  need_regids: need_regids,
+    align: f_align,
+    need_regids: need_regids,
 });
 
 u64 f_valC =  ialign.valC;
@@ -166,59 +158,62 @@ u8 f_rB = ialign.rB;
 
 // Predict next value of PC
 u64 f_pred_pc = [
-  f_icode == JX && !(d_icode in { OPQ, IOPQ, JX })
-   && !(e_icode in { OPQ, IOPQ, JX }) && !e_cnd : f_valP;
-  f_icode in { JX, CALL } : f_valC;
-  f_icode == RET && d_icode == PUSHQ : d_valA;
-  1 : f_valP;
+    // TODO
+    f_icode == JX && !(d_icode in { OPQ, IOPQ, JX }) && !(e_icode in {OPQ, IOPQ, JX}) && !e_cnd : f_valP;
+    f_icode in { JX, CALL } : f_valC;
+    // TODO
+    f_icode == RET && d_icode == PUSHQ : d_valA;
+    1 : f_valP;
 ];
 
-bool f_special_jmp = f_icode == JX && !(d_icode in { OPQ, IOPQ, JX }) && !(e_icode in { OPQ, IOPQ, JX });
+// TODO
+bool f_special_jmp = (f_icode == JX) && !(d_icode in { OPQ, IOPQ, JX }) && !(e_icode in { OPQ, IOPQ, JX });
 
 @set_stage(f, {
-  pred_pc: f_pred_pc,
+    pred_pc: f_pred_pc,
 });
 
 @set_stage(d, {
-  icode: f_icode,
-  ifun: f_ifun,
-  stat: f_stat,
-  valC: f_valC,
-  valP: f_valP,
-  rA: f_rA,
-  rB: f_rB,
-  special_jmp: f_special_jmp,
+    icode: f_icode,
+    ifun: f_ifun,
+    stat: f_stat,
+    valC: f_valC,
+    valP: f_valP,
+    rA: f_rA,
+    rB: f_rB,
+    // TODO
+    special_jmp: f_special_jmp,
 });
 
 :=======================: Decode and Write Back Stage :========================:
 
+// TODO
 bool d_special_jmp = D.special_jmp;
-
 // What register should be used as the A source?
 u8 d_srcA = [
-  D.icode in { CMOVX, RMMOVQ, OPQ, PUSHQ } : D.rA;
-  D.icode in { POPQ, RET } : RSP;
-  1 : RNONE; // Don't need register
+    D.icode in { CMOVX, RMMOVQ, OPQ, PUSHQ } : D.rA;
+    D.icode in { POPQ, RET } : RSP;
+    1 : RNONE; // Don't need register
 ];
 
 // What register should be used as the B source?
 u8 d_srcB = [
-  D.icode in { OPQ, RMMOVQ, MRMOVQ, IOPQ } : D.rB;
-  D.icode in { PUSHQ, POPQ, CALL, RET } : RSP;
-  1 : RNONE; // Don't need register
+    D.icode in { OPQ, RMMOVQ, MRMOVQ, IOPQ } : D.rB; // iopq V, rB 需要获取 rB 的值
+    D.icode in { PUSHQ, POPQ, CALL, RET } : RSP;
+    1 : RNONE; // Don't need register
 ];
 
 // What register should be used as the E destination?
 u8 d_dstE = [
-  D.icode in { CMOVX, IRMOVQ, OPQ, IOPQ } : D.rB;
-  D.icode in { PUSHQ, POPQ, CALL, RET } : RSP;
-  1 : RNONE; // Don't write any register
+    D.icode in { CMOVX, IRMOVQ, OPQ, IOPQ } : D.rB; // IOPQ 计算后的结果要存给 rB
+    D.icode in { PUSHQ, POPQ, CALL, RET } : RSP;
+    1 : RNONE; // Don't write any register
 ];
 
 // What register should be used as the M destination?
 u8 d_dstM = [
-  D.icode in { MRMOVQ, POPQ } : D.rA;
-  1 : RNONE; // Don't write any register
+    D.icode in { MRMOVQ, POPQ } : D.rA;
+    1 : RNONE; // Don't write any register
 ];
 
 u64 d_rvalA = reg_file.valA;
@@ -227,22 +222,22 @@ u64 d_rvalB = reg_file.valB;
 // What should be the A value?
 // Forward into decode stage for valA
 u64 d_valA = [
-  D.icode in { CALL, JX } : D.valP; // Use incremented PC
-  d_srcA == e_dstE : e_valE; // Forward valE from execute
-  d_srcA == M.dstM : m_valM; // Forward valM from memory
-  d_srcA == M.dstE : M.valE; // Forward valE from memory
-  d_srcA == W.dstM : W.valM; // Forward valM from write back
-  d_srcA == W.dstE : W.valE; // Forward valE from write back
-  1 : d_rvalA; // Use value read from register file
+    D.icode in { CALL, JX } : D.valP; // Use incremented PC
+    d_srcA == e_dstE : e_valE; // Forward valE from execute
+    d_srcA == M.dstM : m_valM; // Forward valM from memory
+    d_srcA == M.dstE : M.valE; // Forward valE from memory
+    d_srcA == W.dstM : W.valM; // Forward valM from write back
+    d_srcA == W.dstE : W.valE; // Forward valE from write back
+    1 : d_rvalA; // Use value read from register file
 ];
 
 u64 d_valB = [
-  d_srcB == e_dstE : e_valE; // Forward valE from execute
-  d_srcB == M.dstM : m_valM; // Forward valM from memory
-  d_srcB == M.dstE : M.valE; // Forward valE from memory
-  d_srcB == W.dstM : W.valM; // Forward valM from write back
-  d_srcB == W.dstE : W.valE; // Forward valE from write back
-  1 : d_rvalB; // Use value read from register file
+    d_srcB == e_dstE : e_valE; // Forward valE from execute
+    d_srcB == M.dstM : m_valM; // Forward valM from memory
+    d_srcB == M.dstE : M.valE; // Forward valE from memory
+    d_srcB == W.dstM : W.valM; // Forward valM from write back
+    d_srcB == W.dstE : W.valE; // Forward valE from write back
+    1 : d_rvalB; // Use value read from register file
 ];
 
 u64 d_valC = D.valC;
@@ -251,94 +246,85 @@ u8 d_ifun = D.ifun;
 Stat d_stat = D.stat;
 
 @set_stage(e, {
-  icode: d_icode,
-  ifun: d_ifun,
-  stat: d_stat,
-  valC: d_valC,
-  srcA: d_srcA,
-  srcB: d_srcB,
-  valA: d_valA,
-  valB: d_valB,
-  dstE: d_dstE,
-  dstM: d_dstM,
-  cc: e_cc, // forwarding CC calculated in E stage
-  special_jmp: d_special_jmp,
+    icode: d_icode,
+    ifun: d_ifun,
+    stat: d_stat,
+    valC: d_valC,
+    srcA: d_srcA,
+    srcB: d_srcB,
+    valA: d_valA,
+    valB: d_valB,
+    dstE: d_dstE,
+    dstM: d_dstM,
+    // TODO
+    cc: e_cc,
+    // TODO
+    special_jmp: d_special_jmp,
 });
 
 :==============================: Execute Stage :===============================:
 
-bool e_special_jmp = E.special_jmp;
-
 // Select input A to ALU
 u64 aluA = [
-  E.icode in { CMOVX, OPQ } : E.valA;
-  E.icode in { IRMOVQ, RMMOVQ, MRMOVQ, IOPQ } : E.valC;
-  E.icode in { CALL, PUSHQ } : NEG_8;
-  E.icode in { RET, POPQ } : 8;
-  1 : 0; // Other instructions don't need ALU
+    E.icode in { CMOVX, OPQ } : E.valA;
+    E.icode in { IRMOVQ, RMMOVQ, MRMOVQ, IOPQ } : E.valC; // alu 计算的第一个值来自 valC
+    E.icode in { CALL, PUSHQ } : NEG_8;
+    E.icode in { RET, POPQ } : 8;
+    1 : 0; // Other instructions don't need ALU
 ];
 
 // Select input B to ALU
 u64 aluB = [
-  E.icode in { RMMOVQ, MRMOVQ, OPQ, CALL, PUSHQ, RET, POPQ, IOPQ } : E.valB;
-  E.icode in { CMOVX, IRMOVQ } : 0;
-  1 : 0; // Other instructions don't need ALU
+    E.icode in { RMMOVQ, MRMOVQ, OPQ, CALL, PUSHQ, RET, POPQ, IOPQ } : E.valB; // alu 计算的第二个值来自 rB
+    E.icode in { CMOVX, IRMOVQ } : 0;
+    1 : 0; // Other instructions don't need ALU
 ];
 
 // Set the ALU function
 u8 alufun = [
-  E.icode in {IOPQ, OPQ} : E.ifun;
-  1 : ADD;
+    E.icode in { OPQ, IOPQ } : E.ifun; // IOPQ 与 OPQ 的 ifun 一致
+    1 : ADD;
 ];
 
 @set_input(alu, {
-  a: aluA,
-  b: aluB,
-  fun: alufun,
+    a: aluA,
+    b: aluB,
+    fun: alufun,
 });
 
 // Should the condition codes be updated?
-bool set_cc = E.icode in { IOPQ, OPQ } &&
-  // State changes only during normal operation
-  !(m_stat in { Adr, Ins, Hlt }) && !(W.stat in { Adr, Ins, Hlt });
+bool set_cc = E.icode in { OPQ, IOPQ } && // IOPQ 也可以 set_cc
+    // State changes only during normal operation
+    !(m_stat in { Adr, Ins, Hlt }) && !(W.stat in { Adr, Ins, Hlt });
 
 u64 e_valE = alu.e;
 
 @set_input(reg_cc, {
-  a: aluA,
-  b: aluB,
-  e: e_valE,
-  opfun: alufun,
-  set_cc: set_cc,
+    a: aluA,
+    b: aluB,
+    e: e_valE,
+    opfun: alufun,
+    set_cc: set_cc,
 });
 
 
-ConditionCode e_cc = reg_cc.cc;
-ConditionCode cc = E.cc; // uses previously calculated CC to calculate cond
+ConditionCode cc = reg_cc.cc;
 u8 e_ifun = E.ifun;
 
-u8 e_condfun = [
-  f_special_jmp: f_ifun;
-  1: e_ifun;
-];
-
 @set_input(cond, {
-  cc: cc,
-  condfun: e_condfun,
+    cc: cc,
+    condfun: e_ifun,
 });
 
 bool e_cnd = cond.cnd;
 
 // Generate valA in execute stage
-u64 e_valA = [
-  E.icode in { RMMOVQ, PUSHQ } && E.srcA == M.dstM : m_valM;
-  1 : E.valA;
-];
+u64 e_valA = E.valA;    // Pass valA through stage
 
 // Set dstE to RNONE in event of not-taken conditional move
 u8 e_dstE = [
-  E.icode == CMOVX && !e_cnd : RNONE;
-  1 : E.dstE;
+    E.icode == CMOVX && !e_cnd : RNONE;
+    1 : E.dstE;
 ];
 
 u8 e_dstM = E.dstM;
@@ -346,23 +332,22 @@ u8 e_icode = E.icode;
 Stat e_stat = E.stat;
 
 @set_stage(m, {
-  stat: e_stat,
-  dstM: e_dstM,
-  icode: e_icode,
-  dstE: e_dstE,
-  cnd: e_cnd,
-  valE: e_valE,
-  valA: e_valA,
-  special_jmp: e_special_jmp,
+    stat: e_stat,
+    dstM: e_dstM,
+    icode: e_icode,
+    dstE: e_dstE,
+    cnd: e_cnd,
+    valE: e_valE,
+    valA: e_valA,
 });
 
 :===============================: Memory Stage :===============================:
 
 // Select memory address
 u64 mem_addr = [
-  M.icode in { RMMOVQ, PUSHQ, CALL, MRMOVQ } : M.valE;
-  M.icode in { POPQ, RET } : M.valA;
-  // Other instructions don't need address
+    M.icode in { RMMOVQ, PUSHQ, CALL, MRMOVQ } : M.valE;
+    M.icode in { POPQ, RET } : M.valA;
+    // Other instructions don't need address
 ];
 
 // Set read control signal
@@ -374,16 +359,16 @@ bool mem_write = M.icode in { RMMOVQ, PUSHQ, CALL };
 u64 mem_data = M.valA;
 
 @set_input(dmem, {
-  read: mem_read,
-  write: mem_write,
-  addr: mem_addr,
-  datain: mem_data,
+    read: mem_read,
+    write: mem_write,
+    addr: mem_addr,
+    datain: mem_data,
 });
 
 // Update the status
 Stat m_stat = [
-  dmem.error : Adr;
-  1 : M.stat;
+    dmem.error : Adr;
+    1 : M.stat;
 ];
 
 u8 m_icode = M.icode;
@@ -393,16 +378,13 @@ u64 m_valE = M.valE;
 u8 m_dstE = M.dstE;
 u8 m_dstM = M.dstM;
 
-bool m_spj_ret = M.icode == RET && W.icode == PUSHQ;
-
 @set_stage(w, {
-  stat: m_stat,
-  icode: m_icode,
-  valE: m_valE,
-  valM: m_valM,
-  dstE: m_dstE,
-  dstM: m_dstM,
-  special_ret: m_spj_ret,
+    stat: m_stat,
+    icode: m_icode,
+    valE: m_valE,
+    valM: m_valM,
+    dstE: m_dstE,
+    dstM: m_dstM,
 });
 
 :=============================: Write Back Stage :=============================:
@@ -420,23 +402,23 @@ u8 w_dstM = W.dstM;
 u64 w_valM = W.valM;
 
 @set_input(reg_file, {
-  srcA: d_srcA,
-  srcB: d_srcB,
-  dstE: w_dstE,
-  dstM: w_dstM,
-  valM: w_valM,
-  valE: w_valE,
+    srcA: d_srcA,
+    srcB: d_srcB,
+    dstE: w_dstE,
+    dstM: w_dstM,
+    valM: w_valM,
+    valE: w_valE,
 });
 
 // Update processor status (used for outside monitoring)
 Stat prog_stat = [
-  W.stat == Bub : Aok;
-  1 : W.stat;
+    W.stat == Bub : Aok;
+    1 : W.stat;
 ];
 
 bool prog_term = [
-  prog_stat in { Aok, Bub } : false;
-  1 : true
+    prog_stat in { Aok, Bub } : false;
+    1 : true
 ];
 
 :========================: Pipeline Register Control :=========================:
@@ -444,54 +426,48 @@ bool prog_term = [
 // Should I stall or inject a bubble into Pipeline Register F?
 // At most one of these can be true.
 bool f_bubble = false;
-
-bool load_use_harzard_new = E.icode in { MRMOVQ, POPQ } && (E.dstM == d_srcB || (E.dstM == d_srcA && !(D.icode in { RMMOVQ, PUSHQ })));
-// bool ret_harzard = RET in { D.icode, E.icode, M.icode };
-bool ret_harzard = (D.icode == RET && E.icode != PUSHQ) || (E.icode == RET && M.icode != PUSHQ) || (M.icode == RET && W.icode != PUSHQ);
-bool branch_mispred = (E.icode == JX && !e_cnd && !e_special_jmp);
-
 bool f_stall =
-  // Conditions for a load/use hazard
-  // E.icode in { MRMOVQ, POPQ } && E.dstM in { d_srcA, d_srcB } ||
-  load_use_harzard_new ||
-  // Stalling at fetch while ret passes through pipeline
-  ret_harzard;
+    // Conditions for a load/use hazard
+    E.icode in { MRMOVQ, POPQ } && E.dstM in { d_srcA, d_srcB } ||
+    // Stalling at fetch while ret passes through pipeline
+    RET in {D.icode, E.icode, M.icode};
 
 @set_stage(f, {
-  bubble: f_bubble,
-  stall: f_stall,
+    bubble: f_bubble,
+    stall: f_stall,
 });
 
 // Should I stall or inject a bubble into Pipeline Register D?
 // At most one of these can be true.
 bool d_stall =
-  // Conditions for a load/use hazard
-  load_use_harzard_new;
+    // Conditions for a load/use hazard
+    E.icode in { MRMOVQ, POPQ } && E.dstM in { d_srcA, d_srcB };
 
 bool d_bubble =
-  // Mispredicted branch
-  branch_mispred ||
-  // Stalling at fetch while ret passes through pipeline
-  // but not condition for a load/use hazard
-  !load_use_harzard_new && ret_harzard;
+    // Mispredicted branch
+    (E.icode == JX && !e_cnd) ||
+    // Stalling at fetch while ret passes through pipeline
+    // but not condition for a load/use hazard
+    !(E.icode in { MRMOVQ, POPQ } && E.dstM in { d_srcA, d_srcB }) &&
+      RET in {D.icode, E.icode, M.icode};
 
 @set_stage(d, {
-  stall: d_stall,
-  bubble: d_bubble,
+    stall: d_stall,
+    bubble: d_bubble,
 });
 
 // Should I stall or inject a bubble into Pipeline Register E?
 // At most one of these can be true.
 bool e_stall = false;
 bool e_bubble =
-  // Mispredicted branch
-  branch_mispred ||
-  // Conditions for a load/use hazard
-  load_use_harzard_new;
+    // Mispredicted branch
+    (E.icode == JX && !e_cnd) ||
+    // Conditions for a load/use hazard
+    E.icode in { MRMOVQ, POPQ } && E.dstM in { d_srcA, d_srcB };
 
 @set_stage(e, {
-  stall: e_stall,
-  bubble: e_bubble,
+    stall: e_stall,
+    bubble: e_bubble,
 });
 
 // Should I stall or inject a bubble into Pipeline Register M?
@@ -499,11 +475,11 @@ bool e_bubble =
 bool m_stall = false;
 // Start injecting bubbles as soon as exception passes through memory stage
 bool m_bubble =
-  m_stat in { Adr, Ins, Hlt } || W.stat in { Adr, Ins, Hlt };
+    m_stat in { Adr, Ins, Hlt } || W.stat in { Adr, Ins, Hlt };
 
 @set_stage(m, {
-  stall: m_stall,
-  bubble: m_bubble,
+    stall: m_stall,
+    bubble: m_bubble,
 });
 
 // Should I stall or inject a bubble into Pipeline Register W?
@@ -511,57 +487,57 @@ bool w_stall = W.stat in { Adr, Ins, Hlt };
 bool w_bubble = false;
 
 @set_stage(w, {
-  stall: w_stall,
-  bubble: w_bubble,
+    stall: w_stall,
+    bubble: w_bubble,
 });
 }
 
 mod nofmt {
-  use super::*;
-  use crate::{
-      framework::PipeSim,
-      utils::{format_ctrl, format_icode},
-  };
-  impl PipeSim<Arch> {
-      // print state at the beginning of a cycle
-      pub fn print_state(&self) {
-          // For stage registers, outputs contains information for the following cycle
+    use super::*;
+    use crate::{
+        framework::PipeSim,
+        utils::{format_ctrl, format_icode},
+    };
+    impl PipeSim<Arch> {
+        // print state at the beginning of a cycle
+        pub fn print_state(&self) {
+            // For stage registers, outputs contains information for the following cycle
 
-          #[allow(non_snake_case)]
-          let PipeRegs {
-              f: _,
-              d: D,
-              e: E,
-              m: M,
-              w: W,
-          } = &self.cur_state;
-          let PipeRegs { f, d, e, m, w } = &self.nex_state;
+            #[allow(non_snake_case)]
+            let PipeRegs {
+                f: _,
+                d: D,
+                e: E,
+                m: M,
+                w: W,
+            } = &self.cur_state;
+            let PipeRegs { f, d, e, m, w } = &self.nex_state;
 
-          println!(
-              r#"Stat    F {fstat}    D {dstat}    E {estat}    M {mstat}    W {wstat}
+            println!(
+                r#"Stat    F {fstat}    D {dstat}    E {estat}    M {mstat}    W {wstat}
 icode   f {ficode} D {dicode} E {eicode} M {micode} W {wicode}
 Control F {fctrl:6} D {dctrl:6} E {ectrl:6} M {mctrl:6} W {wctrl:6}"#,
-              fstat = Aok,
-              dstat = D.stat,
-              estat = E.stat,
-              mstat = M.stat,
-              wstat = W.stat,
-              // stage control at the end of last cycle
-              // e.g. dctrl is computed in fetch stage. if dctrl is bubble,
-              // then in the next cycle, D.icode will be NOP.
-              // e. Controls are applied between cycles.
-              fctrl = format_ctrl(f.bubble, f.stall),
-              dctrl = format_ctrl(d.bubble, d.stall),
-              ectrl = format_ctrl(e.bubble, e.stall),
-              mctrl = format_ctrl(m.bubble, m.stall),
-              wctrl = format_ctrl(w.bubble, w.stall),
-              // ficode is actually computed value
-              ficode = format_icode(d.icode),
-              dicode = format_icode(D.icode),
-              eicode = format_icode(E.icode),
-              micode = format_icode(M.icode),
-              wicode = format_icode(W.icode),
-          );
-      }
-  }
+                fstat = Aok,
+                dstat = D.stat,
+                estat = E.stat,
+                mstat = M.stat,
+                wstat = W.stat,
+                // stage control at the end of last cycle
+                // e.g. dctrl is computed in fetch stage. if dctrl is bubble,
+                // then in the next cycle, D.icode will be NOP.
+                // e. Controls are applied between cycles.
+                fctrl = format_ctrl(f.bubble, f.stall),
+                dctrl = format_ctrl(d.bubble, d.stall),
+                ectrl = format_ctrl(e.bubble, e.stall),
+                mctrl = format_ctrl(m.bubble, m.stall),
+                wctrl = format_ctrl(w.bubble, w.stall),
+                // ficode is actually computed value
+                ficode = format_icode(d.icode),
+                dicode = format_icode(D.icode),
+                eicode = format_icode(E.icode),
+                micode = format_icode(M.icode),
+                wicode = format_icode(W.icode),
+            );
+        }
+    }
 }
