@@ -74,7 +74,7 @@ OP7:
 OP8:
 	rmmovq %rcx, 56(%rsi)
 	andq %rcx, %rcx
-	jle Update
+	jle update
 	iaddq $1, %rax
 
 update:
@@ -102,6 +102,7 @@ update_last:
 
 Done:
 	ret
+
 
 # In grader, we will add a "trap: jmp trap" here, which traps your program in an
 # infinite loop. Thus your function should always return instead of falling
