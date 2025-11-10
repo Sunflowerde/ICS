@@ -14,8 +14,7 @@
 
 // This macro defines all pipeline registers in this architecture.
 
-//! 第一步，增加 IOPQ 指令，提升效率，减少指令数
-//! 第二步，修改 decode 阶段
+//! 增加 IOPQ 指令，提升效率，减少指令数
 crate::define_stages! {
     FetchStage f {
         pred_pc: u64 = 0
@@ -311,12 +310,20 @@ u64 e_valE = alu.e;
 
 // TODO
 ConditionCode e_cc = reg_cc.cc;
-ConditionCode cc = reg_cc.cc;
+// TODO
+ConditionCode cc = E.cc;
 u8 e_ifun = E.ifun;
 
+// TODO
+u8 e_condfun = [
+    f_special_jmp: f_ifun;
+    1: e_ifun;
+];
+
+// TODO
 @set_input(cond, {
     cc: cc,
-    condfun: e_ifun,
+    condfun: e_condfun,
 });
 
 bool e_cnd = cond.cnd;
@@ -326,7 +333,7 @@ bool e_cnd = cond.cnd;
 u64 e_valA = [
     E.icode in { RMMOVQ, PUSHQ } && E.srcA == M.dstM : m_valM;
     1 : E.valA;
-]
+];
 
 // Set dstE to RNONE in event of not-taken conditional move
 u8 e_dstE = [
@@ -388,7 +395,7 @@ u8 m_dstE = M.dstE;
 u8 m_dstM = M.dstM;
 
 // TODO
-bool m_special_ret = (M.icode == RET) && (W.icode == PUSHQ);
+bool m_special_jmp_ret = (M.icode == RET) && (W.icode == PUSHQ);
 
 @set_stage(w, {
     stat: m_stat,
@@ -398,7 +405,7 @@ bool m_special_ret = (M.icode == RET) && (W.icode == PUSHQ);
     dstE: m_dstE,
     dstM: m_dstM,
     // TODO
-    special_ret: m_special_ret,
+    special_ret: m_special_jmp_ret,
 });
 
 :=============================: Write Back Stage :=============================:
