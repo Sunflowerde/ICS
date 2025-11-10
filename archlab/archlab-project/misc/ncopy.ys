@@ -60,7 +60,7 @@ OP5:
 	iaddq $1, %rax
 
 OP6:
-	rmmovq %r13, 40(%rdi)
+	rmmovq %r13, 40(%rsi)
 	andq %r13, %r13
 	jle OP7
 	iaddq $1, %rax
