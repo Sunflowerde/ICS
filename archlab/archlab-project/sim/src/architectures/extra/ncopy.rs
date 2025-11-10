@@ -15,6 +15,9 @@
 // This macro defines all pipeline registers in this architecture.
 
 //! 增加 IOPQ 指令，提升效率，减少指令数
+//! 设置 special_jmp 来处理提前当前操作不依赖前一条指令的 CC 时的情形
+//! 在执行阶段增加 cc，传递上一条指令的条件码，提供给 JX，处理 JX 与较近的 OP 无关的情形，减少停顿
+//! 在写回阶段增加 special_ret，用于处理 push 紧跟 ret 的情形，直接预测返回地址为 push 中的值，减少等待开销
 crate::define_stages! {
     FetchStage f {
         pred_pc: u64 = 0
@@ -23,7 +26,7 @@ crate::define_stages! {
         stat: Stat = Bub, icode: u8 = NOP, ifun: u8 = 0,
         rA: u8 = RNONE, rB: u8 = RNONE,
         valC: u64 = 0, valP: u64 = 0,
-        // TODO
+        // 用于判断特殊的跳转：当 JX 的跳转不依赖前一条指令的 CC 时，可以提前计算
         special_jmp: bool = false
     }
     ExecuteStage e {
@@ -32,9 +35,8 @@ crate::define_stages! {
         valA: u64 = 0, valB: u64 = 0,
         dstE: u8 = RNONE, dstM: u8 = RNONE,
         srcA: u8 = RNONE, srcB: u8 = RNONE,
-        // TODO
+        // 执行阶段增加 cc，用来传递上一条指令的 cc，减少因为之前指令为 OP 的等待
         cc: ConditionCode = CC_INIT,
-        // TODO
         special_jmp: bool = false
     }
     /// Memory Access Stage
@@ -42,13 +44,12 @@ crate::define_stages! {
         stat: Stat = Bub, icode: u8 = NOP, cnd: bool = false,
         valE: u64 = 0, valA: u64 = 0,
         dstE: u8 = RNONE, dstM: u8 = RNONE,
-        // TODO
         special_jmp: bool = false
     }
     WritebackStage w {
         stat: Stat = Bub, icode: u8 = NOP, valE: u64 = 0,
         valM: u64 = 0, dstE: u8 = RNONE, dstM: u8 = RNONE,
-        // TODO
+        // 用于处理前一条指令是 push，后一条指令是 ret 的情形，这样可以直接预测为 push 的指令
         special_ret: bool = false
     }
 }
@@ -91,10 +92,10 @@ use Stat::*;
 // What address should instruction be fetched at
 u64 f_pc = [
     // Mispredicted branch. Fetch at incremented PC
-    // TODO
+    // 如果不是特殊情形的跳转，且在 M 阶段发生错误，就修改为正常的 valA(valP)
     M.icode == JX && !M.cnd && !M.special_jmp : M.valA;
     // Completion of RET instruction
-    // TODO
+    // 写回阶段不是特殊的紧跟 push 的情形，那么直接返回 ret 的地址
     W.icode == RET && !W.special_ret : W.valM;
     // Default: Use predicted value of PC (default to 0)
     1 : F.pred_pc;
@@ -157,15 +158,14 @@ u8 f_rB = ialign.rB;
 
 // Predict next value of PC
 u64 f_pred_pc = [
-    // TODO
-    f_icode == JX && !(d_icode in { OPQ, IOPQ, JX }) && !(e_icode in {OPQ, IOPQ, JX}) && !e_cnd : f_valP;
+    f_icode == JX && !(d_icode in { OPQ, IOPQ, JX }) && !(e_icode in { OPQ, IOPQ, JX }) && !e_cnd : f_valP;
     f_icode in { JX, CALL } : f_valC;
-    // TODO
+    // 特殊的 ret 情形，预测跳转值为 push 中的 valA
     f_icode == RET && d_icode == PUSHQ : d_valA;
     1 : f_valP;
 ];
 
-// TODO
+// 如果紧邻的代码中没有设置 cc 的 OP，就没有 special_jmp
 bool f_special_jmp = (f_icode == JX) && !(d_icode in { OPQ, IOPQ, JX }) && !(e_icode in { OPQ, IOPQ, JX });
 
 @set_stage(f, {
@@ -180,13 +180,11 @@ bool f_special_jmp = (f_icode == JX) && !(d_icode in { OPQ, IOPQ, JX }) && !(e_i
     valP: f_valP,
     rA: f_rA,
     rB: f_rB,
-    // TODO
     special_jmp: f_special_jmp,
 });
 
 :=======================: Decode and Write Back Stage :========================:
 
-// TODO
 bool d_special_jmp = D.special_jmp;
 // What register should be used as the A source?
 u8 d_srcA = [
@@ -255,15 +253,12 @@ Stat d_stat = D.stat;
     valB: d_valB,
     dstE: d_dstE,
     dstM: d_dstM,
-    // TODO
     cc: e_cc,
-    // TODO
     special_jmp: d_special_jmp,
 });
 
 :==============================: Execute Stage :===============================:
 
-// TODO
 bool e_special_jmp = E.special_jmp;
 // Select input A to ALU
 u64 aluA = [
@@ -308,19 +303,18 @@ u64 e_valE = alu.e;
     set_cc: set_cc,
 });
 
-// TODO
+// ALU 计算当前的条件码
 ConditionCode e_cc = reg_cc.cc;
-// TODO
+// 用上一条指令的 cc 进行当前跳转指令的判断
 ConditionCode cc = E.cc;
 u8 e_ifun = E.ifun;
 
-// TODO
+// 如果 f_special_jmp 为真，表示 OP 与 JX 相隔太远，需要 F 阶段的 ifun
 u8 e_condfun = [
     f_special_jmp: f_ifun;
     1: e_ifun;
 ];
 
-// TODO
 @set_input(cond, {
     cc: cc,
     condfun: e_condfun,
@@ -329,7 +323,6 @@ u8 e_condfun = [
 bool e_cnd = cond.cnd;
 
 // Generate valA in execute stage
-// TODO
 u64 e_valA = [
     E.icode in { RMMOVQ, PUSHQ } && E.srcA == M.dstM : m_valM;
     1 : E.valA;
@@ -353,7 +346,6 @@ Stat e_stat = E.stat;
     cnd: e_cnd,
     valE: e_valE,
     valA: e_valA,
-    // TODO
     special_jmp : e_special_jmp,
 });
 
@@ -394,7 +386,7 @@ u64 m_valE = M.valE;
 u8 m_dstE = M.dstE;
 u8 m_dstM = M.dstM;
 
-// TODO
+// 处理 push 紧跟 ret 的情形
 bool m_special_jmp_ret = (M.icode == RET) && (W.icode == PUSHQ);
 
 @set_stage(w, {
@@ -404,7 +396,6 @@ bool m_special_jmp_ret = (M.icode == RET) && (W.icode == PUSHQ);
     valM: m_valM,
     dstE: m_dstE,
     dstM: m_dstM,
-    // TODO
     special_ret: m_special_jmp_ret,
 });
 
@@ -447,13 +438,9 @@ bool prog_term = [
 // Should I stall or inject a bubble into Pipeline Register F?
 // At most one of these can be true.
 bool f_bubble = false;
-// TODO
 bool load_use_hazard = E.icode in { MRMOVQ, POPQ } && (E.dstM == d_srcB || (E.dstM == d_srcA) && !(D.icode in { RMMOVQ, PUSHQ}));
-// TODO
 bool ret_hazard = (D.icode == RET && E.icode != PUSHQ) || (E.icode == RET && M.icode != PUSHQ) || (M.icode == RET && W.icode != PUSHQ);
-// TODO
 bool branch_mispred = (E.icode == JX && !e_cnd && !e_special_jmp);
-// TODO
 bool f_stall = load_use_hazard || ret_hazard;
 
 @set_stage(f, {
@@ -463,10 +450,8 @@ bool f_stall = load_use_hazard || ret_hazard;
 
 // Should I stall or inject a bubble into Pipeline Register D?
 // At most one of these can be true.
-// TODO
 bool d_stall = load_use_hazard;
 
-// TODO 
 bool d_bubble = branch_mispred || (!load_use_hazard && ret_hazard);
 
 @set_stage(d, {
@@ -477,7 +462,6 @@ bool d_bubble = branch_mispred || (!load_use_hazard && ret_hazard);
 // Should I stall or inject a bubble into Pipeline Register E?
 // At most one of these can be true.
 bool e_stall = false;
-// TODO
 bool e_bubble = branch_mispred || load_use_hazard;
 
 @set_stage(e, {
