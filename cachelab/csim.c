@@ -7,18 +7,18 @@
 typedef struct {
     int valid;
     int tag;
-    int time; /* 用于 LRU 策略 */
+    int time; /* 用于 LRU 策略的时间戳，判断最长时间没进行访存操作的位置 */
 } cache_line;
 
 typedef struct {
-    cache_line *lines; /* 有 E 个 cache_line 的 cache_set */
+    cache_line* lines; /* 有 E 个 cache_line 的 cache_set */
 } cache_set;
 
 typedef struct {
     int S; /* 组数 */
     int E; /* 每组行数 */
     int B; /* 每行块大小 */
-    cache_set *sets; /* 有 S 个 cache_set 的 cache */
+    cache_set* sets; /* 有 S 个 cache_set 的 cache */
 } cache;
 
 void printHelp() {
@@ -30,6 +30,36 @@ void printHelp() {
     printf("  -E <num>   Number of lines per set.\n");
     printf("  -b <num>   Number of block offset bits.\n");
     printf("  -t <file>  Trace file.\n");
+}
+
+/* 函数声明 */
+/* 参数：s: 组索引位数；E：每组的行数；b：块偏移位数 */
+cache* createCache(int s, int E, int b) {
+    /* 分配 cache 结构。malloc 返回指向 c 的指针 */
+    cache* c = (cache*)malloc(sizeof(cache));
+    c->S = 1 << s;
+    c->E = E;
+    c->B = 1 << b;
+    /* 分配 S 个 cache_set，每个 set 里有 E 行 */
+    for (int i = 0; i < c->S; ++i) {
+        c->sets[i].lines = (cache_line*)malloc(E * sizeof(cache_line));
+        /* 给每一行都进行初始化为 0 */
+        for (int j = 0; j < E; ++j) {
+            c->sets[i].lines[j].valid = 0;
+            c->sets[i].lines[j].tag = 0;
+            c->sets[i].lines[j].time = 0;
+        }
+    }
+    return c;
+}
+
+void freeCache(cache* c) {
+    /* 按创建顺序的逆序进行 free，即先 free 每一行，再处理每个 set，最后处理整个 cache */
+    for (int i = 0; i < c->S; ++i) {
+        free(c->sets[i].lines);
+    }
+    free(c->sets);
+    free(c);
 }
 
 int main(int argc, char* argv[]) {
