@@ -40,7 +40,9 @@ cache* createCache(int s, int E, int b) {
     c->S = 1 << s;
     c->E = E;
     c->B = 1 << b;
-    /* 分配 S 个 cache_set，每个 set 里有 E 行 */
+    /* 分配 S 个 cache_set */
+    c->sets = (cache_set*)malloc(c->S * sizeof(cache_set));
+    /* 给每个 set 分配 E 行*/
     for (int i = 0; i < c->S; ++i) {
         c->sets[i].lines = (cache_line*)malloc(E * sizeof(cache_line));
         /* 给每一行都进行初始化为 0 */
