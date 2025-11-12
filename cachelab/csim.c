@@ -125,6 +125,13 @@ void accessCache(cache* c, unsigned long address, char operation, int verbose, i
             set->lines[lru_index].tag = tag;
         }
     }
+
+    /* 为所有行更新时间戳 */
+    for (int i = 0; i < c->E; ++i) {
+        if (set->lines[i].valid) {
+            ++set->lines[i].time;
+        }
+    }
 }
 
 int main(int argc, char* argv[]) {
