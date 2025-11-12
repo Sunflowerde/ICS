@@ -29,7 +29,7 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
     REQUIRES(N > 0);
     /* 32 * 32*/
     if (M == 32 && N == 32) {
-        int i, j, row, col;
+        int i, j, row;
         int v0, v1, v2, v3, v4, v5, v6, v7; /* 使用 register 代替 cache，处理对角线的情形 */
         for (i = 0; i < M; i += 8) {
             for (j = 0; j < N; j += 8) {
@@ -64,7 +64,7 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
             for (j = 0; j < N; j += 8) {
                 /* 读取 A 的一行 */
                 for (k = i; k < i + 4; ++k) {
-                    v0 = A[k][j];
+                    v0 = A[k][j + 0];
                     v1 = A[k][j + 1];
                     v2 = A[k][j + 2];
                     v3 = A[k][j + 3];
@@ -73,7 +73,7 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
                     v6 = A[k][j + 6];
                     v7 = A[k][j + 7];
                     /* 先将 A1 转置放入 B1 */
-                    B[j][k] = v0;
+                    B[j + 0][k] = v0;
                     B[j + 1][k] = v1;
                     B[j + 2][k] = v2;
                     B[j + 3][k] = v3;
@@ -107,7 +107,7 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
                     v0 = A[k][j + 4];
                     v1 = A[k][j + 5];
                     v2 = A[k][j + 6];
-                    v3 = A[k][j + 6];
+                    v3 = A[k][j + 7];
                     B[j + 4][k] = v0;
                     B[j + 5][k] = v1;
                     B[j + 6][k] = v2;
