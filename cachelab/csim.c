@@ -68,7 +68,7 @@ void freeCache(cache* c) {
 void accessCache(cache* c, unsigned long address, char operation, int verbose, int s, int b, int* hits, int* misses, int* evictions) {
     /* cache 中的排列为 t s b */
     /* 提取 set index */
-    unsigned long set_index = (address >> b) & (1 << s - 1);
+    unsigned long set_index = (address >> b) & ((1 << s) - 1);
     /* 提取 tag */
     unsigned long tag = (address >> (b + s));
     /* 根据 set_index 确定需要寻找的 set */
@@ -85,10 +85,10 @@ void accessCache(cache* c, unsigned long address, char operation, int verbose, i
                 printf(" hit");
             }
             break;
-            /* 统计第一个出现的 empty line */
-            if (set->lines[i].valid == 0 && empty_line == -1) {
-                empty_line = i;
-            }
+        }
+        /* 统计第一个出现的 empty line */
+        if (set->lines[i].valid == 0 && empty_line == -1) {
+            empty_line = i;
         }
     }
 
@@ -190,12 +190,16 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
+    /* 创建 cache */
+    cache* c = createCache(s, E, b);
+    int hits = 0, misses = 0, evictions = 0;
+
     /* 需要处理的指令有三部分，指令名，地址，大小。其中除了 I 以外，其余指令都有一个空格 */
     char operation;
     unsigned long address; /* 地址为 64 位 无符号 */
     int size;
     /* 下面进行读取 */
-    while ((fscanf(fp, " %c %x, %d", &operation, &address, &size)) > 0) {
+    while ((fscanf(fp, " %c %lx,%d", &operation, &address, &size)) > 0) {
         /* 忽略 I 指令 */
         if (operation == 'I') {
             continue;
@@ -209,10 +213,10 @@ int main(int argc, char* argv[]) {
         /* 处理不同操作 */
         /* 一次访存的情形 */
         if (operation == 'L' || operation == 'S') {
-            accessCache();
+            accessCache(c, address, operation, verbose, s, b, &hits, &misses, &evictions);
         } else if (operation == 'M') { /* 两次访存 */
-            accessCache();
-            accessCache();
+            accessCache(c, address, operation, verbose, s, b, &hits, &misses, &evictions);
+            accessCache(c, address, operation, verbose, s, b, &hits, &misses, &evictions);
         }
     }
     /* 最后需要关闭文件 */
