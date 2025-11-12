@@ -1,3 +1,4 @@
+/* 徐梓文 2410306105 */
 /*
  * trans.c - Matrix transpose B = A^T
  *
@@ -26,7 +27,43 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 {
     REQUIRES(M > 0);
     REQUIRES(N > 0);
+    /* 32 * 32*/
+    if (N == 32) {
+        const int BLOCK_SIZE = 8;
+        int i, j, row, col;
+        int v0, v1, v2, v3, v4, v5, v6, v7; /* 使用 register 代替 cache，处理对角线的情形 */
+        for (int i = 0; i < M; i += BLOCK_SIZE) {
+            for (int j = 0; j < N; j += BLOCK_SIZE) {
+                /* 内层循环遍历 8 * 8 矩阵 */
+                for (int row = i; row < i + BLOCK_SIZE; ++row) {
+                    /* 处理对角线 */
+                    if (i == j) {
+                        v0 = A[row][i];
+                        v1 = A[row][i + 1];
+                        v2 = A[row][i + 2];
+                        v3 = A[row][i + 3];
+                        v4 = A[row][i + 4];
+                        v5 = A[row][i + 5];
+                        v6 = A[row][i + 6];
+                        v7 = A[row][i + 7];
 
+                        B[j][row] = v0;
+                        B[j + 1][row] = v1;
+                        B[j + 2][row] = v2;
+                        B[j + 3][row] = v3;
+                        B[j + 4][row] = v4;
+                        B[j + 5][row] = v5;
+                        B[j + 6][row] = v6;
+                        B[j + 7][row] = v7;
+                    } else {
+                        for (col = j; col < j + BLOCK_SIZE; ++col) {
+                            B[col][row] = A[row][col];
+                        }
+                    }
+                }
+            }
+        }
+    }
     ENSURES(is_transpose(M, N, A, B));
 }
 
