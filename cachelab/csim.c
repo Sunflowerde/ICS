@@ -64,6 +64,69 @@ void freeCache(cache* c) {
     free(c);
 }
 
+/* 模拟访存操作 */
+void accessCache(cache* c, unsigned long address, char operation, int verbose, int s, int b, int* hits, int* misses, int* evictions) {
+    /* cache 中的排列为 t s b */
+    /* 提取 set index */
+    unsigned long set_index = (address >> b) & (1 << s - 1);
+    /* 提取 tag */
+    unsigned long tag = (address >> (b + s));
+    /* 根据 set_index 确定需要寻找的 set */
+    cache_set* set = &(c->sets[set_index]);
+    /* 判断是否命中 */
+    int hit_flag = 0;
+    int empty_line = -1; /* 标记空行的索引 */
+    for (int i = 0; i < c->E; ++i) {
+        if (set->lines[i].valid == 1 && set->lines[i].tag == tag) {
+            hit_flag = 1;
+            ++*hits;
+            set->lines[i].time = 0; /* 重置时间戳，表示最新访问，其余行的时间戳都需要 +1 */
+            if (verbose) {
+                printf(" hit");
+            }
+            break;
+            /* 统计第一个出现的 empty line */
+            if (set->lines[i].valid == 0 && empty_line == -1) {
+                empty_line = i;
+            }
+        }
+    }
+
+    /* miss 的情形 */
+    if (!hit_flag) {
+        ++(*misses);
+        if (verbose) {
+            printf(" miss");
+        }
+        /* 查找空行或者选择需要驱逐的行 */
+        /* 有空行，直接放入 */
+        if (empty_line != -1) {
+            set->lines[empty_line].valid = 1;
+            set->lines[empty_line].tag = tag;
+            set->lines[empty_line].time = 0;
+        } else { /* 没有空行，需要驱逐 */
+            ++(*evictions);
+            if (verbose) {
+                printf(" eviction");
+            }
+
+            /* 利用 LRU 策略，替换时间戳最大的行 */
+            int lru_index = 0;
+            int max_time = set->lines[0].time;
+            for (int i = 1; i < c->E; ++i) {
+                if (set->lines[i].time > max_time) {
+                    max_time = set->lines[i].time;
+                    lru_index = i;
+                }
+            }
+            /* 进行替换 */
+            set->lines[lru_index].valid = 1;
+            set->lines[lru_index].time = 0;
+            set->lines[lru_index].tag = tag;
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
     int s = 0, E = 0, b = 0;
     char *tracefile = NULL; /* 要 trace 的文件名 */
@@ -145,10 +208,10 @@ int main(int argc, char* argv[]) {
             accessCache();
         }
     }
-    return 0;
     /* 最后需要关闭文件 */
     fclose(fp);
     printSummary(hits, misses, evictions);
     /* free cache */
     freeCache(c);
+    return 0;
 }
