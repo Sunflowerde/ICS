@@ -35,30 +35,23 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
             for (j = 0; j < N; j += 8) {
                 /* 内层循环遍历 8 * 8 矩阵 */
                 for (row = i; row < i + 8; ++row) {
-                    /* 处理对角线 */
-                    if (i == j) {
-                        v0 = A[row][i];
-                        v1 = A[row][i + 1];
-                        v2 = A[row][i + 2];
-                        v3 = A[row][i + 3];
-                        v4 = A[row][i + 4];
-                        v5 = A[row][i + 5];
-                        v6 = A[row][i + 6];
-                        v7 = A[row][i + 7];
+                    v0 = A[row][j];
+                    v1 = A[row][j + 1];
+                    v2 = A[row][j + 2];
+                    v3 = A[row][j + 3];
+                    v4 = A[row][j + 4];
+                    v5 = A[row][j + 5];
+                    v6 = A[row][j + 6];
+                    v7 = A[row][j + 7];
 
-                        B[j][row] = v0;
-                        B[j + 1][row] = v1;
-                        B[j + 2][row] = v2;
-                        B[j + 3][row] = v3;
-                        B[j + 4][row] = v4;
-                        B[j + 5][row] = v5;
-                        B[j + 6][row] = v6;
-                        B[j + 7][row] = v7;
-                    } else {
-                        for (col = j; col < j + 8; ++col) {
-                            B[col][row] = A[row][col];
-                        }
-                    }
+                    B[j][row] = v0;
+                    B[j + 1][row] = v1;
+                    B[j + 2][row] = v2;
+                    B[j + 3][row] = v3;
+                    B[j + 4][row] = v4;
+                    B[j + 5][row] = v5;
+                    B[j + 6][row] = v6;
+                    B[j + 7][row] = v7;
                 }
             }
         }
@@ -91,7 +84,7 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
                     B[j + 3][k + 4] = v7;
                 }
                 /* 将 A3 转置放入 B2，并将 B2 转置放入 B3 */
-                for (k = j; k < j + 4; ++j) {
+                for (k = j; k < j + 4; ++k) {
                     v0 = A[i + 4][k];
                     v1 = A[i + 5][k];
                     v2 = A[i + 6][k];
