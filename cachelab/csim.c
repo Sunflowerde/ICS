@@ -112,5 +112,43 @@ int main(int argc, char* argv[]) {
         printf("s = %d, E = %d, b = %d, trace = %s\n", s, E, b, tracefile);
     }
 
+    /* 读入 trace 文件 */
+    FILE* fp = fopen(tracefile, "r"); /* 只读 */
+    /* 异常处理 */
+    if (fp == NULL) {
+        printf("Error: could not open file %s\n", tracefile);
+        exit(1);
+    }
+
+    /* 需要处理的指令有三部分，指令名，地址，大小。其中除了 I 以外，其余指令都有一个空格 */
+    char operation;
+    unsigned long address; /* 地址为 64 位 无符号 */
+    int size;
+    /* 下面进行读取 */
+    while ((fscanf(fp, " %c %x, %d", &operation, &address, &size)) > 0) {
+        /* 忽略 I 指令 */
+        if (operation == 'I') {
+            continue;
+        }
+        
+        /* 详细模式 */
+        if (verbose) {
+            printf("%c %lx,%d", operation, address, size);
+        }
+
+        /* 处理不同操作 */
+        /* 一次访存的情形 */
+        if (operation == 'L' || operation == 'S') {
+            accessCache();
+        } else if (operation == 'M') { /* 两次访存 */
+            accessCache();
+            accessCache();
+        }
+    }
     return 0;
+    /* 最后需要关闭文件 */
+    fclose(fp);
+    printSummary(hits, misses, evictions);
+    /* free cache */
+    freeCache(c);
 }
