@@ -28,14 +28,13 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
     REQUIRES(M > 0);
     REQUIRES(N > 0);
     /* 32 * 32*/
-    if (N == 32) {
-        const int BLOCK_SIZE = 8;
+    if (M == 32 && N == 32) {
         int i, j, row, col;
         int v0, v1, v2, v3, v4, v5, v6, v7; /* 使用 register 代替 cache，处理对角线的情形 */
-        for (int i = 0; i < M; i += BLOCK_SIZE) {
-            for (int j = 0; j < N; j += BLOCK_SIZE) {
+        for (i = 0; i < M; i += 8) {
+            for (j = 0; j < N; j += 8) {
                 /* 内层循环遍历 8 * 8 矩阵 */
-                for (int row = i; row < i + BLOCK_SIZE; ++row) {
+                for (row = i; row < i + 8; ++row) {
                     /* 处理对角线 */
                     if (i == j) {
                         v0 = A[row][i];
@@ -56,10 +55,70 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
                         B[j + 6][row] = v6;
                         B[j + 7][row] = v7;
                     } else {
-                        for (col = j; col < j + BLOCK_SIZE; ++col) {
+                        for (col = j; col < j + 8; ++col) {
                             B[col][row] = A[row][col];
                         }
                     }
+                }
+            }
+        }
+    } else if (M==64 && N == 64) {
+        /* 将 8 * 8 分为 4 个 4 * 4 的小矩阵，再做详细处理 */
+        int i, j, k;
+        int v0, v1, v2, v3, v4, v5, v6, v7;
+        /* 先按 8 * 8 大块进行遍历 */
+        for (i = 0; i < M; i += 8) {
+            for (j = 0; j < N; j += 8) {
+                /* 读取 A 的一行 */
+                for (k = i; k < i + 4; ++k) {
+                    v0 = A[k][j];
+                    v1 = A[k][j + 1];
+                    v2 = A[k][j + 2];
+                    v3 = A[k][j + 3];
+                    v4 = A[k][j + 4];
+                    v5 = A[k][j + 5];
+                    v6 = A[k][j + 6];
+                    v7 = A[k][j + 7];
+                    /* 先将 A1 转置放入 B1 */
+                    B[j][k] = v0;
+                    B[j + 1][k] = v1;
+                    B[j + 2][k] = v2;
+                    B[j + 3][k] = v3;
+                    /* 将 A2 临时放入 B2 */
+                    B[j + 0][k + 4] = v4;
+                    B[j + 1][k + 4] = v5;
+                    B[j + 2][k + 4] = v6;
+                    B[j + 3][k + 4] = v7;
+                }
+                /* 将 A3 转置放入 B2，并将 B2 转置放入 B3 */
+                for (k = j; k < j + 4; ++j) {
+                    v0 = A[i + 4][k];
+                    v1 = A[i + 5][k];
+                    v2 = A[i + 6][k];
+                    v3 = A[i + 7][k];
+                    v4 = B[k][i + 4];
+                    v5 = B[k][i + 5];
+                    v6 = B[k][i + 6];
+                    v7 = B[k][i + 7];
+                    B[k][i + 4] = v0;
+                    B[k][i + 5] = v1;
+                    B[k][i + 6] = v2;
+                    B[k][i + 7] = v3;
+                    B[k + 4][i + 0] = v4;
+                    B[k + 4][i + 1] = v5;
+                    B[k + 4][i + 2] = v6;
+                    B[k + 4][i + 3] = v7;
+                }
+                /* 将 A4 转置放入 B4 */
+                for (k = i + 4; k < i + 8; ++k) {
+                    v0 = A[k][j + 4];
+                    v1 = A[k][j + 5];
+                    v2 = A[k][j + 6];
+                    v3 = A[k][j + 6];
+                    B[j + 4][k] = v0;
+                    B[j + 5][k] = v1;
+                    B[j + 6][k] = v2;
+                    B[j + 7][k] = v3;
                 }
             }
         }
