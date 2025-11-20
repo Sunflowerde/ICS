@@ -115,14 +115,81 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
                 }
             }
         }
-    } else if (M == 60 && N == 68) { /* 60 * 68 */
-        /* 采用 8 * 8，剩余情况单独处理 */
-        int i, j, row, col;
-        for (i = 0; i < N; i += 4) {
-            for (j = 0; j < M; j += 4) {
-                for (row = i; (row < i + 4) && (row < N); ++row) {
-                    for (col = j; (col < j + 4) && (col < M); ++col) {
-                        B[col][row] = A[row][col];
+    } else if (M ==60 && N == 68) {
+        int i, j, k, l;
+        int v0, v1, v2, v3, v4, v5, v6, v7;
+        /* 先处理 64 * 56 的部分 */
+        for (i = 0; i < 64; i += 8) {
+            for (j = 0; j < 56; j += 8) {
+                for (k = 0; k < 8; k++) {
+                    v0 = A[i + k][j + 0];
+                    v1 = A[i + k][j + 1];
+                    v2 = A[i + k][j + 2];
+                    v3 = A[i + k][j + 3];
+                    v4 = A[i + k][j + 4];
+                    v5 = A[i + k][j + 5];
+                    v6 = A[i + k][j + 6];
+                    v7 = A[i + k][j + 7];
+                    B[j + k][i + 0] = v0;
+                    B[j + k][i + 1] = v1;
+                    B[j + k][i + 2] = v2;
+                    B[j + k][i + 3] = v3;
+                    B[j + k][i + 4] = v4;
+                    B[j + k][i + 5] = v5;
+                    B[j + k][i + 6] = v6;
+                    B[j + k][i + 7] = v7;
+                }
+                /* 进行原地转置 */
+                for (k = 0; k < 8; k++) {
+                    for (l = 0; l < k; l++) {
+                        v0 = B[j + k][i + l];
+                        B[j + k][i + l] = B[j + l][i + k];
+                        B[j + l][i + k] = v0;
+                    }
+                }
+            }
+        }
+        /* 然后处理右边 68 * 4 */
+        for (i = 0; i < 68; i += 4) {
+            for (j = 56; j < 60; j += 4) {
+                for (k = 0; k < 4; k++) {
+                v0 = A[i + k][j + 0];
+                v1 = A[i + k][j + 1];
+                v2 = A[i + k][j + 2];
+                v3 = A[i + k][j + 3];
+                B[j + k][i + 0] = v0;
+                B[j + k][i + 1] = v1;
+                B[j + k][i + 2] = v2;
+                B[j + k][i + 3] = v3;
+                }
+                /* 内部转置 B */
+                for (k = 0; k < 4; k++) {
+                    for (l = 0; l < k; l++) {
+                        v0 = B[j + k][i + l];
+                        B[j + k][i + l] = B[j + l][i + k];
+                        B[j + l][i + k] = v0;
+                    }
+                }
+            }
+        }
+        /* 最后处理 4 * 56 */
+        for (i = 64; i < 68; i += 4) {
+            for (j = 0; j < 56; j += 4) {
+                for (k = 0; k < 4; k++) {
+                    v0 = A[i + k][j + 0];
+                    v1 = A[i + k][j + 1];
+                    v2 = A[i + k][j + 2];
+                    v3 = A[i + k][j + 3];
+                    B[j + k][i + 0] = v0;
+                    B[j + k][i + 1] = v1;
+                    B[j + k][i + 2] = v2;
+                    B[j + k][i + 3] = v3;
+                }
+                for (k = 0; k < 4; k++) {
+                    for (l = 0; l < k; l++) {
+                        v0 = B[j + k][i + l];
+                        B[j + k][i + l] = B[j + l][i + k];
+                        B[j + l][i + k] = v0;
                     }
                 }
             }
