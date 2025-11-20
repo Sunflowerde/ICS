@@ -31,8 +31,8 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
     if (M == 32 && N == 32) {
         int i, j, row;
         int v0, v1, v2, v3, v4, v5, v6, v7; /* 使用 register 代替 cache，处理对角线的情形 */
-        for (i = 0; i < M; i += 8) {
-            for (j = 0; j < N; j += 8) {
+        for (i = 0; i < N; i += 8) {
+            for (j = 0; j < M; j += 8) {
                 /* 内层循环遍历 8 * 8 矩阵 */
                 for (row = i; row < i + 8; ++row) {
                     v0 = A[row][j];
@@ -60,8 +60,8 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
         int i, j, k;
         int v0, v1, v2, v3, v4, v5, v6, v7;
         /* 先按 8 * 8 大块进行遍历 */
-        for (i = 0; i < M; i += 8) {
-            for (j = 0; j < N; j += 8) {
+        for (i = 0; i < N; i += 8) {
+            for (j = 0; j < M; j += 8) {
                 /* 读取 A 的一行 */
                 for (k = i; k < i + 4; ++k) {
                     v0 = A[k][j + 0];
@@ -112,6 +112,18 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
                     B[j + 5][k] = v1;
                     B[j + 6][k] = v2;
                     B[j + 7][k] = v3;
+                }
+            }
+        }
+    } else if (M == 60 && N == 68) { /* 60 * 68 */
+        /* 采用 8 * 8，剩余情况单独处理 */
+        int i, j, row, col;
+        for (i = 0; i < N; i += 4) {
+            for (j = 0; j < M; j += 4) {
+                for (row = i; (row < i + 4) && (row < N); ++row) {
+                    for (col = j; (col < j + 4) && (col < M); ++col) {
+                        B[col][row] = A[row][col];
+                    }
                 }
             }
         }
