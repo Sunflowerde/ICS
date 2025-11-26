@@ -347,9 +347,6 @@ eval(char *cmdline)
 {
     int bg;              /* should the job run in bg or fg? */
     struct cmdline_tokens tok;
-    pid_t pid;
-    /* 声明信号集，用于阻塞信号 */
-    sigset_t mask_all, mask_one, prev_one;
     /* Parse command line */
     bg = parseline(cmdline, &tok); 
 
@@ -357,80 +354,137 @@ eval(char *cmdline)
         return;
     if (tok.argv[0] == NULL) /* ignore empty lines */
         return;
-    /* 处理 nohup 指令，移位参数并设置标记位 */
-    int is_nohup = 0;
-    if (tok.builtins == BUILTIN_NOHUP) {
-        is_nohup = 1;
-        /* 将 argv 左移，去掉 nohup */
-        int i = 0;
-        for (; tok.argv[i] != NULL; i++) {
-            tok.argv[i] = tok.argv[i + 1];
-        }
-        tok.argc--;
-    }
-    if (builtin_cmd(&tok)) {
-        return;
-    }
-    /* 初始化信号集 */
-    /* mask_one 只包含 SIGCHILD，mask_all 包含所有信号 */
-    sigfillset(&mask_all);
-    sigemptyset(&mask_one);
-    sigaddset(&mask_one, SIGCHLD);
 
-    /* 在 fork 之前阻塞 SIGCHLD */
-    sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
-    /* 处理外部指令 */
-    if ((pid = fork()) == 0) {
-        sigset_t empty_mask;
-        sigemptyset(&empty_mask);
-        sigprocmask(SIG_SETMASK, &empty_mask, NULL);
-        setpgid(0, 0);
-        /* 如果是 nohup 指令，忽略 SIGHUP 信号 */
-        if (is_nohup) {
-            signal(SIGHUP, SIG_IGN);
-        }
-        /* 输入重定向 */
-        if (tok.infile) {
-            int fd = open(tok.infile, O_RDONLY);
-            if (fd < 0) {
-                printf("%s: No such file or directory\n", tok.infile);
-                exit(1);
+    int input_file = STDIN_FILENO;
+    int output_file = STDOUT_FILENO;
+    if (tok.infile) {
+        input_file = open(tok.infile, O_RDONLY, 0);
+    }
+    if (tok.outfile) {
+        output_file = open(tok.outfile, O_WRONLY, 0);
+    }
+    int input = dup(STDIN_FILENO);
+    int output = dup(STDOUT_FILENO);
+    /* 重定向 */
+    dup2(input_file, STDIN_FILENO);
+    dup2(output_file, STDOUT_FILENO);
+
+    if (tok.builtins == BUILTIN_QUIT) {
+        exit(0);
+    } else if (tok.builtins == BUILTIN_JOBS) {
+        listjobs(job_list, output_file);
+    } else if (tok.builtins == BUILTIN_NOHUP) {
+        sigset_t mask, prev;
+        /* 阻塞 SIGHUP */
+        sigemptyset(&mask);
+        sigaddset(&mask, SIGHUP);
+        sigprocmask(SIG_BLOCK, &mask, &prev);
+        /* 递归执行命令，移除 nohup */
+        eval(cmdline + 6);
+        sigprocmask(SIG_SETMASK, &prev, NULL);
+    } else if (tok.builtins == BUILTIN_KILL) {
+        struct job_t* job;
+        int jid;
+        pid_t pid;
+        /* 通过 jid 找 job */
+        if (tok.argv[1][0] == '%') {
+            jid = atoi(tok.argv[1] + 1);
+            /* 取绝对值 */
+            if (jid < 0) {
+                jid = -jid;
             }
-            dup2(fd, STDIN_FILENO);
-            close(fd);
-        }
-        /* 输出重定向 */
-        if (tok.outfile) {
-            int fd = open(tok.outfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-            if (fd < 0) {
-                printf("Permission denied\n");
-                exit(1);
+            job = getjobjid(job_list, jid);
+            if (job == NULL) {
+                printf("%%%d: No such job\n", jid); /* 两个 % 表示转义 */
             }
-            dup2(fd, STDOUT_FILENO);
-            close(fd);
         }
-        if (execve(tok.argv[0], tok.argv, environ) < 0) {
-            printf("%s: Command not found\n", tok.argv[0]);
-            exit(1);
+        /* 通过 pid 找 job */
+        else {
+            pid = atoi(tok.argv[1]);
+            /* 取绝对值 */
+            if (pid < 0) {
+                pid = -pid;
+            }
+            job = getjobpid(job_list, pid);
+        }
+        /* 更新 pid */
+        pid = job->pid;
+        kill(pid, SIGTERM);
+    } else if (tok.builtins == BUILTIN_BG) {
+        struct job_t* job;
+        int jid;
+        pid_t pid;
+        /* 通过两种方式找 job */
+        if (tok.argv[1][0] == '%') {
+            jid = atoi(tok.argv[1] + 1);
+            job = getjobjid(job_list, jid);
+        } else {
+            pid = atoi(tok.argv[1]);
+            job = getjobpid(job_list, pid);
+        }
+        pid = job->pid;
+        kill(pid, SIGTERM);
+        /* 更新 job 的状态 */
+        job->state = BG;
+        printf("[%d] (%d) %s\n", job->jid, job->pid, job->cmdline);
+    } else if (tok.builtins == BUILTIN_FG) {
+        struct job_t* job;
+        int jid;
+        pid_t pid;
+        if (tok.argv[1][0] == '%') {
+            jid = atoi(tok.argv[1] + 1);
+            job = getjobjid(job_list, jid);
+        } else {
+            pid = atoi(tok.argv[1]);
+            job = getjobpid(job_list, pid);
+        }
+        pid = job->pid;
+        kill(pid, SIGCONT);
+        job->state = FG;
+        /* 等待正在运行的进程结束才可以切换 */
+        sigset_t mask;
+        sigemptyset(&mask);
+        while (pid == fgpid(job_list)) {
+            sigsuspend(&mask);
+        }
+    } else if (tok.builtins == BUILTIN_NONE) { /* 处理外部函数 */
+        sigset_t all, prev;
+        pid_t pid;
+        sigfillset(&all);
+        sigprocmask(SIG_BLOCK, &all, &prev);
+        if ((pid = fork()) == 0) {
+            setpgid(0 ,0);
+            sigprocmask(SIG_SETMASK, &prev, NULL);
+            if (execve(tok.argv[0], tok.argv, environ) > 0) {
+                printf("%s: Command not found\n", tok.argv[0]);
+                exit(0);
+            }
+        } else {
+            /* 判断进程是前台还是后台 */
+            int temp = BG;
+            if (!bg) {
+                temp = FG;
+            }
+            addjob(job_list, pid, temp, cmdline);
+            sigprocmask(SIG_SETMASK, &prev, NULL);
+            if (!bg) {
+                /* 等待进程结束 */
+                while (pid == fgpid(job_list)) {
+                    sigsuspend(&prev);
+                }
+            } else {
+                printf("[%d] (%d) %s\n", pid2jid(pid), pid, cmdline);
+            }
         }
     }
-
-    /* 阻塞所有信号 */
-    sigprocmask(SIG_BLOCK, &mask_all, NULL);
-    addjob(job_list, pid, bg ? BG : FG, cmdline);
-
-    /* 恢复只阻塞 SIGCHLD 的状态 */
-    sigprocmask(SIG_SETMASK, &prev_one, NULL);
-    if (!bg) {
-        /* 先恢复信号再等待 */
-        sigprocmask(SIG_SETMASK, &prev_one, NULL);
-        while (fgpid(job_list) == pid) {
-            sigsuspend(&prev_one);
-        }
-    } else {
-        printf("[%d] (%d) %s\n", pid2jid(pid), pid, cmdline);
-        /* 打印完后恢复信号 */
-        sigprocmask(SIG_SETMASK, &prev_one, NULL);
+    /* 最后处理文件，重定向 */
+    if (tok.infile) {
+        close(input_file);
+        dup2(input, STDIN_FILENO);
+    }
+    if (tok.outfile) {
+        close(output_file);
+        dup2(output, STDOUT_FILENO);
     }
 
     return;
