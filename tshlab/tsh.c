@@ -81,6 +81,8 @@ void eval(char *cmdline);
 void sigchld_handler(int sig);
 void sigtstp_handler(int sig);
 void sigint_handler(int sig);
+void do_bgfg(char** argv);
+int builtin_cmd(struct cmdline_tokens* tok);
 
 /* Here are helper routines that we've provided for you */
 int parseline(const char *cmdline, struct cmdline_tokens *tok); 
@@ -185,6 +187,106 @@ main(int argc, char **argv)
     exit(0); /* control never reaches here */
 }
 
+/* 执行内置的 bg 和 fg */
+void do_bgfg(char** argv) {
+    struct job_t* job = NULL;
+    char* id = argv[1];
+    int jid;
+    pid_t pid;
+
+    /* 检查参数是否存在 */
+    if (id == NULL) {
+        printf("%s command requires PID or %%jobid argument\n", argv[0]);
+        return;
+    }
+
+    /* 解析 JID */
+    if (id[0] == '%') {
+        jid = atoi(&id[1]);
+        job = getjobjid(job_list, jid);
+        if (job == NULL) {
+            printf("%s: No such job\n", id);
+            return;
+        }
+    }
+
+    /* 解析 PID */
+    else if (isdigit(id[0])) {
+        pid = atoi(id);
+        job = getjobpid(job_list, pid);
+        if (job == NULL) {
+            printf("(%d): No such process\n", pid);
+            return;
+        }
+    }
+    else {
+        printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+        return;
+    }
+
+    /* 发送 SIGCONT 让进程继续执行 */
+    kill(-(job->pid), SIGCONT);
+    /* 如果是 bg 命令 */
+    if (!(strcmp(argv[0], "bg"))) {
+        job->state = BG;
+        printf("[%d] (%d) %s\n", job->jid, job->pid, job->cmdline);
+    }
+    /* 如果是 fg 命令 */
+    else {
+        job->state = FG;
+        /* 定义信号集 */
+        sigset_t mask_one, prev_one;
+        sigemptyset(&mask_one);
+        sigaddset(&mask_one, SIGCHLD);
+        /* 检查前阻塞 SIGCHLD，防止竞争 */
+        sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
+        /* 等待 */
+        while (fgpid(job_list) == job->pid) {
+            sigsuspend(&prev_one);
+        }
+        /* 恢复掩码 */
+        sigprocmask(SIG_SETMASK, &prev_one, NULL);
+    }
+    return;
+}
+
+int builtin_cmd(struct cmdline_tokens* tok) {
+    /* quit */
+    if (tok->builtins == BUILTIN_QUIT) {
+        exit(0);
+    }
+
+    /* jobs */
+    if (tok->builtins == BUILTIN_JOBS) {
+        int fd = STDOUT_FILENO;
+        if (tok->outfile) {
+            /* 如果有输出重定向 */
+            fd = open(tok->outfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+            if (fd < 0) {
+                printf("Permission denied\n");
+                return 1;
+            }
+        }
+        listjobs(job_list, fd);
+        if (fd != STDOUT_FILENO) {
+            close(fd);
+        }
+        return 1;
+    }
+
+    /* bg 或 fg */
+    if (tok->builtins == BUILTIN_BG || tok->builtins == BUILTIN_FG) {
+        do_bgfg(tok->argv);
+        return 1;
+    }
+
+    /* 非内置命令 */
+    if (tok->builtins == BUILTIN_NONE) {
+        return 0;
+    }
+
+    return 1;
+}
 /* 
  * eval - Evaluate the command line that the user has just typed in
  * 
@@ -211,15 +313,9 @@ eval(char *cmdline)
         return;
     if (tok.argv[0] == NULL) /* ignore empty lines */
         return;
-
-    if (tok.builtins == BUILTIN_QUIT) {
-        exit(0);
-    }
-    /* 如果是内置程序，但不是 quit，就先跳过，之后再来实现 */
-    if (tok.builtins != BUILTIN_NONE) {
+    if (builtin_cmd(&tok)) {
         return;
     }
-
     /* 初始化信号集 */
     /* mask_one 只包含 SIGCHILD，mask_all 包含所有信号 */
     sigfillset(&mask_all);
@@ -233,6 +329,26 @@ eval(char *cmdline)
         /* 解除阻塞，否则无法接收信号 */
         sigprocmask(SIG_SETMASK, &prev_one, NULL);
         setpgid(0, 0);
+        /* 输入重定向 */
+        if (tok.infile) {
+            int fd = open(tok.infile, O_RDONLY);
+            if (fd < 0) {
+                printf("%s: No such file or directory\n", tok.infile);
+                exit(1);
+            }
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+        }
+        /* 输出重定向 */
+        if (tok.outfile) {
+            int fd = open(tok.outfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+            if (fd < 0) {
+                printf("Permission denied\n");
+                exit(1);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
         if (execve(tok.argv[0], tok.argv, environ) < 0) {
             printf("%s: Command not found\n", tok.argv[0]);
             exit(1);
@@ -496,7 +612,7 @@ sigtstp_handler(int sig)
 
     pid = fgpid(job_list);
     if (pid != 0) {
-        kill(-pid, SIGSTOP);
+        kill(-pid, SIGTSTP);
     }
 
     errno = olderrno;
