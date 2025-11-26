@@ -1,7 +1,7 @@
 /* 
  * tsh - A tiny shell program with job control
- * 
- * <Put your name and login ID here>
+ *
+ * 徐梓文 2410306105 
  */
 #include <assert.h>
 #include <stdio.h>
@@ -201,7 +201,9 @@ eval(char *cmdline)
 {
     int bg;              /* should the job run in bg or fg? */
     struct cmdline_tokens tok;
-
+    pid_t pid;
+    /* 声明信号集，用于阻塞信号 */
+    sigset_t mask_all, mask_one, prev_one;
     /* Parse command line */
     bg = parseline(cmdline, &tok); 
 
@@ -209,6 +211,35 @@ eval(char *cmdline)
         return;
     if (tok.argv[0] == NULL) /* ignore empty lines */
         return;
+
+    if (tok.builtins == BUILTIN_QUIT) {
+        exit(0);
+    }
+    /* 如果是内置程序，但不是 quit，就先跳过，之后再来实现 */
+    if (tok.builtins != BUILTIN_NONE) {
+        return;
+    }
+
+    /* 初始化信号集 */
+    sigfillset(&mask_all);
+    sigemptyset(&mask_one);
+    /* 处理外部指令 */
+    if ((pid = fork()) == 0) {
+        setpgid(0, 0);
+        if (execve(tok.argv[0], tok.argv, environ) < 0) {
+            printf("%s: Command not found\n", tok.argv[0]);
+            exit(1);
+        }
+    }
+
+    if (!bg) {
+        int status;
+        if (waitpid(pid, &status, 0) < 0) {
+            unix_error("waitfg: waitpid error");
+        }
+    } else {
+        printf("(%d) %s\n", pid, cmdline);
+    }
 
     return;
 }
