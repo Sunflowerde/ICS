@@ -81,9 +81,6 @@ void eval(char *cmdline);
 void sigchld_handler(int sig);
 void sigtstp_handler(int sig);
 void sigint_handler(int sig);
-void do_bgfg(char** argv);
-void do_kill(char** argv);
-int builtin_cmd(struct cmdline_tokens* tok);
 
 /* Here are helper routines that we've provided for you */
 int parseline(const char *cmdline, struct cmdline_tokens *tok); 
@@ -188,149 +185,6 @@ main(int argc, char **argv)
     exit(0); /* control never reaches here */
 }
 
-/* 执行内置的 bg 和 fg */
-void do_bgfg(char** argv) {
-    struct job_t* job = NULL;
-    char* id = argv[1];
-    int jid;
-    pid_t pid;
-    sigset_t mask_all, prev_one;
-
-    /* 检查参数是否存在 */
-    if (id == NULL) {
-        printf("%s command requires PID or %%jobid argument\n", argv[0]);
-        return;
-    }
-
-    /* 解析 JID */
-    if (id[0] == '%') {
-        jid = atoi(&id[1]);
-        job = getjobjid(job_list, jid);
-        if (job == NULL) {
-            printf("%s: No such job\n", id);
-            return;
-        }
-    }
-
-    /* 解析 PID */
-    else if (isdigit(id[0])) {
-        pid = atoi(id);
-        job = getjobpid(job_list, pid);
-        if (job == NULL) {
-            printf("(%d): No such process\n", pid);
-            return;
-        }
-    }
-    else {
-        printf("%s: argument must be a PID or %%jobid\n", argv[0]);
-        return;
-    }
-
-    /* 发送 SIGCONT 前必须先阻塞 */
-    sigfillset(&mask_all);
-    sigprocmask(SIG_BLOCK, &mask_all, &prev_one);
-    /* 发送 SIGCONT 让进程继续执行 */
-    kill(-(job->pid), SIGCONT);
-    /* 如果是 bg 命令 */
-    if (!(strcmp(argv[0], "bg"))) {
-        job->state = BG;
-        printf("[%d] (%d) %s\n", job->jid, job->pid, job->cmdline);
-        sigprocmask(SIG_SETMASK, &prev_one, NULL); /* 恢复信号 */
-    }
-    /* 如果是 fg 命令 */
-    else {
-        job->state = FG;
-        /* 等待 */
-        while (fgpid(job_list) == job->pid) {
-            sigsuspend(&prev_one);
-        }
-        /* 恢复掩码 */
-        sigprocmask(SIG_SETMASK, &prev_one, NULL);
-    }
-    return;
-}
-
-void do_kill(char** argv) {
-    char* id = argv[1];
-    struct job_t* job;
-    int jid;
-    pid_t pid;
-
-    if (id == NULL) {
-        printf("%s command requires PID or %%jobid argument\n", argv[0]);
-        return;
-    }
-
-    /* 解析 JID */
-    if (id[0] == '%') {
-        jid = atoi(&id[1]); 
-        job = getjobjid(job_list, jid);
-        if (job == NULL) {
-            printf("%s: No such job\n", id);
-            return;
-        }
-        pid = job->pid;
-    }
-    /* 解析 PID */
-    else if (isdigit(id[0])) {
-        pid = atoi(id);
-        job = getjobpid(job_list, pid);
-        if (job == NULL) {
-            printf("(%d): No such process\n", pid);
-            return;
-        }
-    }
-    else {
-        printf("%s: argument must be a PID or %%jobid\n", argv[0]);
-        return;
-    }
-    /* 发送 SIGTERM */
-    kill(-pid, SIGTERM);
-}
-
-int builtin_cmd(struct cmdline_tokens* tok) {
-    /* quit */
-    if (tok->builtins == BUILTIN_QUIT) {
-        exit(0);
-    }
-
-    /* jobs */
-    else if (tok->builtins == BUILTIN_JOBS) {
-        int fd = STDOUT_FILENO;
-        if (tok->outfile) {
-            /* 如果有输出重定向 */
-            fd = open(tok->outfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-            if (fd < 0) {
-                printf("Permission denied\n");
-                return 1;
-            }
-        }
-        /* 阻塞信号以安全访问 job_list */
-        sigset_t mask_all, prev_all;
-        sigfillset(&mask_all);
-        sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
-        listjobs(job_list, fd);
-        sigprocmask(SIG_SETMASK, &prev_all, NULL);
-
-        if (fd != STDOUT_FILENO) {
-            close(fd);
-        }
-        return 1;
-    }
-
-    /* bg 或 fg */
-    if (tok->builtins == BUILTIN_BG || tok->builtins == BUILTIN_FG) {
-        do_bgfg(tok->argv);
-        return 1;
-    }
-    /* kill */
-    else if (tok->builtins == BUILTIN_KILL) {
-        do_kill(tok->argv);
-        return 1;
-    }
-    /* 非内置命令 */
-    return 0;
-}
 /* 
  * eval - Evaluate the command line that the user has just typed in
  * 
@@ -383,7 +237,7 @@ eval(char *cmdline)
         eval(cmdline + 6);
         sigprocmask(SIG_SETMASK, &prev, NULL);
     } else if (tok.builtins == BUILTIN_KILL) {
-        struct job_t* job;
+        struct job_t* job = NULL;
         int jid;
         pid_t pid;
         /* 通过 jid 找 job */
@@ -396,6 +250,8 @@ eval(char *cmdline)
             job = getjobjid(job_list, jid);
             if (job == NULL) {
                 printf("%%%d: No such job\n", jid); /* 两个 % 表示转义 */
+                /* 报错后必须立刻结束 */
+                return;
             }
         }
         /* 通过 pid 找 job */
@@ -407,7 +263,12 @@ eval(char *cmdline)
             }
             job = getjobpid(job_list, pid);
         }
-        /* 更新 pid */
+        /* 在访问 job 之前需要查看是否有空指针 */
+        if (job == NULL) {
+            printf("(%s): No such process\n", tok.argv[1]);
+            return; /* 报错必须返回，防止输出两次结果 */
+        }
+        /* 更新 pid，此时 job 一定不为 NULL */
         pid = job->pid;
         kill(pid, SIGTERM);
     } else if (tok.builtins == BUILTIN_BG) {
@@ -423,7 +284,7 @@ eval(char *cmdline)
             job = getjobpid(job_list, pid);
         }
         pid = job->pid;
-        kill(pid, SIGTERM);
+        kill(pid, SIGCONT);
         /* 更新 job 的状态 */
         job->state = BG;
         printf("[%d] (%d) %s\n", job->jid, job->pid, job->cmdline);
