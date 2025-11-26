@@ -460,6 +460,23 @@ sigchld_handler(int sig)
 void 
 sigint_handler(int sig) 
 {
+    int olderrno = errno;
+    pid_t pid;
+    sigset_t mask_all, prev_all;
+    sigfillset(&mask_all);
+
+    /* 阻塞信号防止竞争 */
+    sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+    /* 获取当前的 pid */
+    pid = fgpid(job_list);
+    /* 检查完就解锁 */
+    sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    /* pid 的所有进程 */
+    if (pid != 0) {
+        kill(-pid, SIGINT);
+    }
+
+    errno = olderrno;
     return;
 }
 
@@ -471,6 +488,18 @@ sigint_handler(int sig)
 void 
 sigtstp_handler(int sig) 
 {
+    int olderrno = errno;
+    pid_t pid;
+    sigset_t mask_all, prev_all;
+    sigfillset(&mask_all);
+    sigprocmask(SIG_SETMASK, &prev_all, NULL);
+
+    pid = fgpid(job_list);
+    if (pid != 0) {
+        kill(-pid, SIGSTOP);
+    }
+
+    errno = olderrno;
     return;
 }
 
