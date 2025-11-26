@@ -221,10 +221,17 @@ eval(char *cmdline)
     }
 
     /* 初始化信号集 */
+    /* mask_one 只包含 SIGCHILD，mask_all 包含所有信号 */
     sigfillset(&mask_all);
     sigemptyset(&mask_one);
+    sigaddset(&mask_one, SIGCHLD);
+
+    /* 在 fork 之前阻塞 SIGCHLD */
+    sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
     /* 处理外部指令 */
     if ((pid = fork()) == 0) {
+        /* 解除阻塞，否则无法接收信号 */
+        sigprocmask(SIG_SETMASK, &prev_one, NULL);
         setpgid(0, 0);
         if (execve(tok.argv[0], tok.argv, environ) < 0) {
             printf("%s: Command not found\n", tok.argv[0]);
@@ -232,13 +239,19 @@ eval(char *cmdline)
         }
     }
 
+    /* 阻塞所有信号 */
+    sigprocmask(SIG_BLOCK, &mask_all, NULL);
+    addjob(job_list, pid, bg ? BG : FG, cmdline);
+
+    /* 恢复只阻塞 SIGCHLD 的状态 */
+    sigprocmask(SIG_SETMASK, &prev_one, NULL);
     if (!bg) {
-        int status;
-        if (waitpid(pid, &status, 0) < 0) {
-            unix_error("waitfg: waitpid error");
+        /* 只要前台进程一直是 pid，就一直挂起 */
+        while (fgpid(job_list) == pid) {
+            sigsuspend(&prev_one);
         }
     } else {
-        printf("(%d) %s\n", pid, cmdline);
+        printf("[%d] (%d) %s\n", pid2jid(pid), pid, cmdline);
     }
 
     return;
@@ -411,6 +424,31 @@ parseline(const char *cmdline, struct cmdline_tokens *tok)
 void 
 sigchld_handler(int sig) 
 {
+    int olderrno = errno; /* 保存原有错误状态 */
+    sigset_t mask_all, prev_all;
+    pid_t pid;
+    int status;
+
+    sigfillset(&mask_all);
+    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
+        /* 阻塞所有信号，安全修改 job_list */
+        sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+        /* 子进程正常退出 */
+        if (WIFEXITED(status)) {
+            deletejob(job_list, pid);
+        } else if (WIFSIGNALED(status)) { /* 子进程被信号杀死 */
+            sio_put("Job [%d] (%d) terminated by signal %d\n", pid2jid(pid), pid, WTERMSIG(status));
+            deletejob(job_list, pid);
+        } else if (WIFSTOPPED(status)) { /* 子进程暂停 */
+            struct job_t* job = getjobpid(job_list, pid);
+            job->state = ST; /* 修改状态为 stopped */
+            sio_put("Job [%d] (%d) stopped by signal %d\n", pid2jid(pid), pid, WSTOPSIG(status));
+        }
+        /* 恢复信号状态 */
+        sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    }
+
+    errno = olderrno;
     return;
 }
 
