@@ -82,6 +82,7 @@ void sigchld_handler(int sig);
 void sigtstp_handler(int sig);
 void sigint_handler(int sig);
 void do_bgfg(char** argv);
+void do_kill(char** argv);
 int builtin_cmd(struct cmdline_tokens* tok);
 
 /* Here are helper routines that we've provided for you */
@@ -193,6 +194,7 @@ void do_bgfg(char** argv) {
     char* id = argv[1];
     int jid;
     pid_t pid;
+    sigset_t mask_all, prev_one;
 
     /* 检查参数是否存在 */
     if (id == NULL) {
@@ -224,12 +226,9 @@ void do_bgfg(char** argv) {
         return;
     }
 
-    /* 定义信号集 */
-    sigset_t mask_one, prev_one;
-    sigemptyset(&mask_one);
-    sigaddset(&mask_one, SIGCHLD);
-    /* 操作之前阻塞 SIGCHLD */
-    sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
+    /* 发送 SIGCONT 前必须先阻塞 */
+    sigfillset(&mask_all);
+    sigprocmask(SIG_BLOCK, &mask_all, &prev_one);
     /* 发送 SIGCONT 让进程继续执行 */
     kill(-(job->pid), SIGCONT);
     /* 如果是 bg 命令 */
@@ -251,6 +250,44 @@ void do_bgfg(char** argv) {
     return;
 }
 
+void do_kill(char** argv) {
+    char* id = argv[1];
+    struct job_t* job;
+    int jid;
+    pid_t pid;
+
+    if (id == NULL) {
+        printf("%s command requires PID or %%jobid argument\n", argv[0]);
+        return;
+    }
+
+    /* 解析 JID */
+    if (id[0] == '%') {
+        jid = atoi(&id[1]); 
+        job = getjobjid(job_list, jid);
+        if (job == NULL) {
+            printf("%s: No such job\n", id);
+            return;
+        }
+        pid = job->pid;
+    }
+    /* 解析 PID */
+    else if (isdigit(id[0])) {
+        pid = atoi(id);
+        job = getjobpid(job_list, pid);
+        if (job == NULL) {
+            printf("(%d): No such process\n", pid);
+            return;
+        }
+    }
+    else {
+        printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+        return;
+    }
+    /* 发送 SIGTERM */
+    kill(-pid, SIGTERM);
+}
+
 int builtin_cmd(struct cmdline_tokens* tok) {
     /* quit */
     if (tok->builtins == BUILTIN_QUIT) {
@@ -258,7 +295,7 @@ int builtin_cmd(struct cmdline_tokens* tok) {
     }
 
     /* jobs */
-    if (tok->builtins == BUILTIN_JOBS) {
+    else if (tok->builtins == BUILTIN_JOBS) {
         int fd = STDOUT_FILENO;
         if (tok->outfile) {
             /* 如果有输出重定向 */
@@ -268,7 +305,13 @@ int builtin_cmd(struct cmdline_tokens* tok) {
                 return 1;
             }
         }
+        /* 阻塞信号以安全访问 job_list */
+        sigset_t mask_all, prev_all;
+        sigfillset(&mask_all);
+        sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
         listjobs(job_list, fd);
+        sigprocmask(SIG_SETMASK, &prev_all, NULL);
+
         if (fd != STDOUT_FILENO) {
             close(fd);
         }
@@ -280,13 +323,13 @@ int builtin_cmd(struct cmdline_tokens* tok) {
         do_bgfg(tok->argv);
         return 1;
     }
-
-    /* 非内置命令 */
-    if (tok->builtins == BUILTIN_NONE || tok->builtins == BUILTIN_KILL) {
-        return 0;
+    /* kill */
+    else if (tok->builtins == BUILTIN_KILL) {
+        do_kill(tok->argv);
+        return 1;
     }
-
-    return 1;
+    /* 非内置命令 */
+    return 0;
 }
 /* 
  * eval - Evaluate the command line that the user has just typed in
@@ -314,6 +357,17 @@ eval(char *cmdline)
         return;
     if (tok.argv[0] == NULL) /* ignore empty lines */
         return;
+    /* 处理 nohup 指令，移位参数并设置标记位 */
+    int is_nohup = 0;
+    if (tok.builtins == BUILTIN_NOHUP) {
+        is_nohup = 1;
+        /* 将 argv 左移，去掉 nohup */
+        int i = 0;
+        for (; tok.argv[i] != NULL; i++) {
+            tok.argv[i] = tok.argv[i + 1];
+        }
+        tok.argc--;
+    }
     if (builtin_cmd(&tok)) {
         return;
     }
@@ -327,9 +381,14 @@ eval(char *cmdline)
     sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
     /* 处理外部指令 */
     if ((pid = fork()) == 0) {
-        /* 解除阻塞，否则无法接收信号 */
-        sigprocmask(SIG_SETMASK, &prev_one, NULL);
+        sigset_t empty_mask;
+        sigemptyset(&empty_mask);
+        sigprocmask(SIG_SETMASK, &empty_mask, NULL);
         setpgid(0, 0);
+        /* 如果是 nohup 指令，忽略 SIGHUP 信号 */
+        if (is_nohup) {
+            signal(SIGHUP, SIG_IGN);
+        }
         /* 输入重定向 */
         if (tok.infile) {
             int fd = open(tok.infile, O_RDONLY);
@@ -609,7 +668,7 @@ sigtstp_handler(int sig)
     pid_t pid;
     sigset_t mask_all, prev_all;
     sigfillset(&mask_all);
-    sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    sigprocmask(SIG_BLOCK, &prev_all, NULL);
 
     pid = fgpid(job_list);
     if (pid != 0) {
