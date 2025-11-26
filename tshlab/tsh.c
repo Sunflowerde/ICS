@@ -224,22 +224,23 @@ void do_bgfg(char** argv) {
         return;
     }
 
+    /* 定义信号集 */
+    sigset_t mask_one, prev_one;
+    sigemptyset(&mask_one);
+    sigaddset(&mask_one, SIGCHLD);
+    /* 操作之前阻塞 SIGCHLD */
+    sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
     /* 发送 SIGCONT 让进程继续执行 */
     kill(-(job->pid), SIGCONT);
     /* 如果是 bg 命令 */
     if (!(strcmp(argv[0], "bg"))) {
         job->state = BG;
         printf("[%d] (%d) %s\n", job->jid, job->pid, job->cmdline);
+        sigprocmask(SIG_SETMASK, &prev_one, NULL); /* 恢复信号 */
     }
     /* 如果是 fg 命令 */
     else {
         job->state = FG;
-        /* 定义信号集 */
-        sigset_t mask_one, prev_one;
-        sigemptyset(&mask_one);
-        sigaddset(&mask_one, SIGCHLD);
-        /* 检查前阻塞 SIGCHLD，防止竞争 */
-        sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
         /* 等待 */
         while (fgpid(job_list) == job->pid) {
             sigsuspend(&prev_one);
@@ -281,7 +282,7 @@ int builtin_cmd(struct cmdline_tokens* tok) {
     }
 
     /* 非内置命令 */
-    if (tok->builtins == BUILTIN_NONE) {
+    if (tok->builtins == BUILTIN_NONE || tok->builtins == BUILTIN_KILL) {
         return 0;
     }
 
