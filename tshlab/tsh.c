@@ -327,7 +327,6 @@ eval(char *cmdline)
                 temp = FG;
             }
             addjob(job_list, pid, temp, cmdline);
-            sigprocmask(SIG_SETMASK, &prev, NULL);
             if (!bg) {
                 /* 等待进程结束 */
                 while (pid == fgpid(job_list)) {
@@ -336,6 +335,7 @@ eval(char *cmdline)
             } else {
                 printf("[%d] (%d) %s\n", pid2jid(pid), pid, cmdline);
             }
+            sigprocmask(SIG_SETMASK, &prev, NULL);
         }
     }
     /* 最后处理文件，重定向 */
