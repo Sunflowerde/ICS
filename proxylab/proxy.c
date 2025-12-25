@@ -6,9 +6,6 @@
 #include "csapp.h"
 #include "cache.h"
 
-/* Recommended max cache and object sizes */
-#define MAX_CACHE_SIZE 1049000
-#define MAX_OBJECT_SIZE 102400
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
@@ -65,7 +62,7 @@ void doit(int fd)
     char hostname[MAXLINE], path[MAXLINE], port[MAXLINE];
     char http_header[MAXLINE];
 
-    char url_store[MAXLINE];
+    char url_store[MAXLINE * 3];
     char cache_buf[MAX_OBJECT_SIZE];
     int total_size = 0;
     int cached_size = 0;
@@ -120,7 +117,7 @@ void doit(int fd)
     /* 读取响应时积累数据 */
     total_size = 0;
 
-    while ((n = Rio_readnb(&rio_server, serverfd)) > 0) {
+    while ((n = Rio_readnb(&rio_server, buf, MAXLINE)) > 0) {
         Rio_writen(fd, buf, n);
         if (total_size + n <= MAX_OBJECT_SIZE) {
             memcpy(cache_buf + total_size, buf, n);
