@@ -19,7 +19,7 @@ void *thread(void *vargp);
 
 int main(int argc, char **argv)
 {
-    int listenfd, connfd;
+    int listenfd;
     char hostname[MAXLINE], port[MAXLINE];
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
@@ -178,7 +178,7 @@ void *thread(void *vargp) {
     Free(vargp);
 
     doit(connfd);
-    CLose(connfd);
+    Close(connfd);
     
     return NULL;
 }
