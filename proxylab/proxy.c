@@ -4,6 +4,7 @@
  */
 #include <stdio.h>
 #include "csapp.h"
+#include "cache.h"
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
@@ -33,6 +34,8 @@ int main(int argc, char **argv)
     /* 忽略 SIGPIPE 信号 */
     Signal(SIGPIPE, SIG_IGN);
 
+    cache_init();
+
     listenfd = Open_listenfd(argv[1]);
 
     pthread_t tid;
@@ -61,6 +64,12 @@ void doit(int fd)
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
     char hostname[MAXLINE], path[MAXLINE], port[MAXLINE];
     char http_header[MAXLINE];
+
+    char url_store[MAXLINE];
+    char cache_buf[MAX_OBJECT_SIZE];
+    int total_size = 0;
+    int cached_size = 0;
+
     rio_t rio_client, rio_server;
     int serverfd;
     size_t n;
@@ -83,6 +92,17 @@ void doit(int fd)
     /* 解析 URI */
     parse_uri(uri, hostname, path, port);
 
+    /* 构建唯一的 url key */
+    sprintf(url_store, "http://%s:%s%s", hostname, port, path);
+
+    /* 在 cache 中查找 */
+    if ((cached_size = cache_find(url_store, cache_buf)) > 0) {
+        /* hit */
+        Rio_writen(fd, cache_buf, cached_size);
+        return;
+    }
+
+    /* 未命中 */
     /* 构建 HTTP 头部 */
     build_http_header(http_header, hostname, path, atoi(port), &rio_client);
 
@@ -97,13 +117,26 @@ void doit(int fd)
     Rio_readinitb(&rio_server, serverfd);
     Rio_writen(serverfd, http_header, strlen(http_header));
 
-    /* 转发给客户端 */
-    while ((n = Rio_readnb(&rio_server, buf, MAXLINE)) > 0) {
+    /* 读取响应时积累数据 */
+    total_size = 0;
+
+    while ((n = Rio_readnb(&rio_server, serverfd)) > 0) {
         Rio_writen(fd, buf, n);
+        if (total_size + n <= MAX_OBJECT_SIZE) {
+            memcpy(cache_buf + total_size, buf, n);
+            total_size += n;
+        } else {
+            total_size = MAX_OBJECT_SIZE + 1;
+        }
     }
 
     /* 关闭连接 */
     Close(serverfd);
+
+    /* 如果大小符合限制，加入 cache */
+    if (total_size <= MAX_OBJECT_SIZE) {
+        cache_add(url_store, cache_buf, total_size);
+    }
 }
 
 void parse_uri(char *uri, char *hostname, char *path, char *port) {
